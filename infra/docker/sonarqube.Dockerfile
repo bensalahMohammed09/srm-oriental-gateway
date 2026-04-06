@@ -1,0 +1,23 @@
+ARG SONAR_VERSION
+FROM sonarqube:${SONAR_VERSION}
+
+# Technical labels
+LABEL component="Quality-Analysis-Server"
+LABEL project="SRM Oriental Gateway"
+
+# Environment variables for databse connection
+ARG SONAR_JDBC_USERNAME
+ARG SONAR_JDBC_PASSWORD
+ARG SONAR_JDBC_URL
+ARG SONAR_INTERNAL_PORT
+
+ENV SONAR_JDBC_USERNAME=${SONAR_JDBC_USERNAME} \
+    SONAR_JDBC_PASSWORD=${SONAR_JDBC_PASSWORD} \
+    SONAR_JDBC_URL=${SONAR_JDBC_URL} \
+    SONAR_WEB_PORT=${SONAR_INTERNAL_PORT}
+
+# SonarQube runs as non-root user by default
+
+EXPOSE ${SONAR_INTERNAL_PORT}
+
+

@@ -1,0 +1,213 @@
+version: '3.8'
+
+services:
+  # 1. API
+  srm-api:
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+      args:
+        DOTNET_VERSION: ${DOTNET_VERSION}
+        API_INTERNAL_PORT: ${API_INTERNAL_PORT}
+        API_ENV: ${API_ENV}
+    container_name: srm-api
+    ports:
+      - "${API_EXTERNAL_PORT}:${API_INTERNAL_PORT}"
+    networks:
+      - web-net
+      - back-net
+      - ops-net
+    depends_on:
+      - srm-db
+
+  # 2. Dashboard
+  srm-dashboard:
+    build:
+      context: .
+      dockerfile: infra/docker/dashboard.Dockerfile
+      args:
+        NODE_VERSION: ${NODE_VERSION}
+        NGINX_VERSION: ${NGINX_VERSION}
+        DASHBOARD_INTERNAL_PORT: ${DASHBOARD_INTERNAL_PORT}
+    container_name: srm-dashboard
+    ports:
+      - "${DASHBOARD_EXTERNAL_PORT}:${DASHBOARD_INTERNAL_PORT}"
+    networks:
+      - web-net
+
+  # 3. Worker OCR
+  srm-ocr-worker:
+    build:
+      context: .
+      dockerfile: infra/docker/worker.Dockerfile
+      args:
+        PYTHON_VERSION: ${PYTHON_VERSION}
+        SRM_USER_ID: ${SRM_USER_ID}
+        SRM_GROUP_ID: ${SRM_GROUP_ID}
+        WORKER_ENV: ${WORKER_ENV}
+    container_name: srm-ocr-worker
+    networks:
+      - back-net
+      - ops-net
+    depends_on:
+      - srm-db
+
+  # 4. Database
+  srm-db:
+    build:
+      context: .
+      dockerfile: infra/docker/db.Dockerfile
+      args:
+        POSTGRES_VERSION: ${POSTGRES_VERSION}
+        POSTGRES_USER: ${POSTGRES_USER}
+        POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+        POSTGRES_DB: ${POSTGRES_DB}
+        DB_INTERNAL_PORT: ${DB_INTERNAL_PORT}
+    container_name: srm-db
+    ports:
+      - "${DB_EXTERNAL_PORT}:${DB_INTERNAL_PORT}"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - back-net
+
+  # 5. n8n
+  n8n:
+    build:
+      context: .
+      dockerfile: infra/docker/n8n.Dockerfile
+      args:
+        N8N_VERSION: ${N8N_VERSION}
+        N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+        N8N_INTERNAL_PORT: ${N8N_INTERNAL_PORT}
+    container_name: n8n
+    ports:
+      - "${N8N_EXTERNAL_PORT}:${N8N_INTERNAL_PORT}"
+    networks:
+      - back-net
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+  # ---- OBSERVABILITY ----
+  prometheus:
+    build:
+      context: .
+      dockerfile: infra/docker/prometheus.Dockerfile
+      args:
+        PROMETHEUS_VERSION: ${PROMETHEUS_VERSION}
+        PROMETHEUS_INTERNAL_PORT: ${PROMETHEUS_INTERNAL_PORT}
+    container_name: prometheus
+    ports:
+      - "${PROMETHEUS_EXTERNAL_PORT}:${PROMETHEUS_INTERNAL_PORT}"
+    networks:
+      - ops-net
+    volumes:
+      - prometheus_data:/prometheus
+    
+  loki:
+    build:
+      context: .
+      dockerfile: infra/docker/loki.Dockerfile
+      args:
+        LOKI_VERSION: ${LOKI_VERSION}
+        LOKI_INTERNAL_PORT: ${LOKI_INTERNAL_PORT}
+    container_name: loki
+    networks:
+      - ops-net
+    volumes:
+      - loki_data:/tmp/loki
+
+  grafana:
+    build:
+      context: .
+      dockerfile: infra/docker/grafana.Dockerfile
+      args:
+        GRAFANA_VERSION: ${GRAFANA_VERSION}
+        GRAFANA_INTERNAL_PORT: ${GRAFANA_INTERNAL_PORT}
+        GRAFANA_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+    container_name: grafana
+    ports:
+      - "${GRAFANA_EXTERNAL_PORT}:${GRAFANA_INTERNAL_PORT}"
+    networks:
+      - ops-net
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+  promtail:
+    build:
+      context: .
+      dockerfile: infra/docker/promtail.Dockerfile
+      args:
+        PROMTAIL_VERSION: ${PROMTAIL_VERSION}
+        PROMTAIL_INTERNAL_PORT: ${PROMTAIL_INTERNAL_PORT}
+    container_name: promtail
+    networks:
+      - ops-net
+    volumes:
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+
+  node-exporter:
+    build:
+      context: .
+      dockerfile: infra/docker/node-exporter.Dockerfile
+      args:
+        NODE_EXPORTER_VERSION: ${NODE_EXPORTER_VERSION}
+        NODE_EXPORTER_INTERNAL_PORT: ${NODE_EXPORTER_INTERNAL_PORT}
+    container_name: node-exporter
+    ports:
+      - "${NODE_EXPORTER_EXTERNAL_PORT}:${NODE_EXPORTER_INTERNAL_PORT}"
+    networks:
+      - ops-net
+
+  # ---- QUALITY ----
+  sonarqube:
+    build:
+      context: .
+      dockerfile: infra/docker/sonarqube.Dockerfile
+      args:
+        SONAR_VERSION: ${SONAR_VERSION}
+        SONAR_INTERNAL_PORT: ${SONAR_INTERNAL_PORT}
+        SONAR_JDBC_USERNAME: ${SONAR_JDBC_USERNAME}
+        SONAR_JDBC_PASSWORD: ${SONAR_JDBC_PASSWORD}
+        SONAR_JDBC_URL: ${SONAR_JDBC_URL}
+    container_name: sonarqube
+    ports:
+      - "${SONAR_EXTERNAL_PORT}:${SONAR_INTERNAL_PORT}"
+    networks:
+      - sec-net
+    depends_on:
+      - sonar-db
+
+  sonar-db:
+    build: 
+      context: .
+      dockerfile: infra/docker/sonar-db.Dockerfile
+      args:
+        SONAR_DB_VERSION: ${SONAR_DB_VERSION}
+        SONAR_DB_NAME: ${SONAR_DB_NAME}
+        SONAR_DB_USER: ${SONAR_DB_USER}
+        SONAR_DB_PASSWORD: ${SONAR_DB_PASSWORD}
+        SONAR_DB_INTERNAL_PORT: ${SONAR_DB_INTERNAL_PORT}
+    container_name: sonar-db
+    ports:
+      - "${SONAR_DB_EXTERNAL_PORT}:${SONAR_DB_INTERNAL_PORT}"
+    networks:
+      - sec-net
+    volumes:
+      - sonar_db_data:/var/lib/postgresql/data
+
+# Networks & Volumes
+networks:
+  web-net:
+  back-net:
+  ops-net:
+  sec-net:
+
+volumes:
+  postgres_data:
+  n8n_data:
+  prometheus_data:
+  loki_data:
+  grafana_data:
+  sonar_db_data:

@@ -1,0 +1,13 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    url: http://prometheus:9091
+    access: proxy
+    isDefault: true
+
+  - name: Loki
+    type: loki
+    url: http://loki:3101
+    access: proxy

@@ -1,0 +1,52 @@
+# === SRM Oriental Gateway: Industrial Standard ===
+
+# --- Secrets & Environment ---
+# Never commit your passwords or encryption keys
+.env
+.env.*
+!.env.example
+*.pfx
+*.pem
+*.p12
+
+# --- .NET (Gateway API) ---
+# Build artifacts and local VS settings
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+.vs/
+.vshistory/
+TestResults/
+
+# --- Node/React (Dashboard) ---
+# Dependencies and production builds
+node_modules/
+dist/
+build/
+.eslintcache
+npm-debug.log*
+
+# --- Python (OCR Worker) ---
+# Bytecode and virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# --- Docker & Local Data ---
+# Prevent committing your local database or log storage
+.docker/
+postgres_data/
+sonar_db_data/
+loki_data/
+prometheus_data/
+grafana_data/
+
+# --- IDEs & OS ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp

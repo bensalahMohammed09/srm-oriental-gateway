@@ -1,0 +1,102 @@
+pipeline {
+    agent any
+    
+    environment {
+        // Tagging strategy: v[BuildNum]-[Branch]
+        IMAGE_TAG = "v${env.BUILD_NUMBER}-${env.BRANCH_NAME.replaceAll('/', '-')}"
+    }
+
+    stages {
+        stage('Initialize') {
+            steps {
+                script {
+                    echo "--- Loading External Configurations ---"
+                    def props = load "${WORKSPACE}/infra/jenkins/pipeline.conf"
+                    
+                    // Injection des variables pour usage global
+                    env.DOCKER_REGISTRY = props.DOCKER_REGISTRY
+                    env.DOCKER_CREDS_ID = props.DOCKER_CREDS_ID
+                    env.IMAGE_API       = props.IMAGE_API
+                    env.IMAGE_UI        = props.IMAGE_UI
+                    env.IMAGE_WORKER    = props.IMAGE_WORKER
+                    env.PATH_API_PROJ   = props.PATH_API_PROJ
+                    env.PATH_UI_DIR     = props.PATH_UI_DIR
+                    env.PATH_WORKER_DIR = props.PATH_WORKER_DIR
+                    env.PATH_DOCKER     = props.PATH_DOCKER
+                }
+            }
+        }
+        
+        stage('Build and Test Backend') {
+            steps {
+                echo "--- Building .NET 9 API ---"
+                sh "dotnet restore ${env.PATH_API_PROJ}"
+                sh "dotnet build ${env.PATH_API_PROJ} --configuration Release --no-restore"
+
+                echo "--- Running API Tests ---"
+                // On suppose que le dossier /tests est à la racine
+                sh "dotnet test tests/ --configuration Release --logger:trx"
+            }
+            post {
+                always {
+                    mstest testResults: '**/*.trx', keepLongStdio: true
+                }
+            }
+        }
+
+        stage('Build Frontend') {
+            steps {
+                echo "--- Compiling React/Vite Assets ---"
+                dir("${env.PATH_UI_DIR}") {
+                    sh "npm install"
+                    sh "npm run build"
+                }
+            }
+        }
+
+        stage('Security Audit') {
+            steps {
+                echo "--- Scanning FileSystem for Vulnerabilities (Trivy) ---"
+                sh "trivy fs --exit-code 1 --severity HIGH,CRITICAL ."
+            }
+        }
+
+        stage('Push to Registry') {
+            steps {
+                script {
+                    docker.withRegistry("https://${env.DOCKER_REGISTRY}", env.DOCKER_CREDS_ID) {
+                        
+                        echo "--- Processing API Image ---"
+                        // Context est la racine (.), Dockerfile est dans infra/docker/
+                        def apiImg = docker.build("${env.DOCKER_REGISTRY}/${env.IMAGE_API}:${IMAGE_TAG}", "-f ${env.PATH_DOCKER}/api.Dockerfile .")
+                        apiImg.push()
+                        apiImg.push("latest")
+
+                        echo "--- Processing UI Image ---"
+                        def uiImg = docker.build("${env.DOCKER_REGISTRY}/${env.IMAGE_UI}:${IMAGE_TAG}", "-f ${env.PATH_DOCKER}/ui.Dockerfile .")
+                        uiImg.push()
+                        uiImg.push("latest")
+
+                        echo "--- Processing Worker Image ---"
+                        // Corrigé: nom du fichier ocr.Dockerfile selon votre upload
+                        def workerImg = docker.build("${env.DOCKER_REGISTRY}/${env.IMAGE_WORKER}:${IMAGE_TAG}", "-f ${env.PATH_DOCKER}/ocr.Dockerfile .")
+                        workerImg.push()
+                        workerImg.push("latest")
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Successfully deployed SRM Oriental Gateway: ${IMAGE_TAG}"
+        }
+        failure {
+            echo "Build FAILED for ${IMAGE_TAG}. Check logs for errors."
+        }
+        always {
+            cleanWs()
+        }
+    }
+}
