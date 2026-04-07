@@ -52,10 +52,12 @@ pipeline {
                      timeout(time: 5, unit: 'MINUTES') {
                         def qg = waitForQualityGate()
                         echo "Qualité Gate Status: ${qg.status}"
+                     }
+                    }
                     }catch(e){
                         echo "---Attention : échec de la connexion à SonarQube ou délai dépassé. Vérifiez que SonarQube est opérationnel.---"
                     }
-                   }
+                   
                }
             }
         }
