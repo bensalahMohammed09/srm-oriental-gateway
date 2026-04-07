@@ -14,7 +14,8 @@ pipeline {
                 steps{
                     script{
                         script{
-                            cleanWs() // Nettoie l'espace de travail pour éviter les conflits avec d'anciennes données  
+                            sh "git config --global --add safe.directory '*'"
+                            deleteDir() // Nettoie le workspace pour éviter les conflits de fichiers 
                             echo 'Récupération du fichier .env depuis le volume partagé...'
                             sh "cp /tmp/.env.srm .env"
                             echo 'Fichier .env copié avec succès !'
