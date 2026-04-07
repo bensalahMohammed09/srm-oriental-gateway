@@ -9,7 +9,7 @@ LABEL project="SRM-Oriental-Gateway"
 ARG PROMTAIL_INTERNAL_PORT
 
 # Copy the custom configuration file into the container
-COPY infra/promtail/promtail-config.yaml /etc/promtail/promtail-config.yaml
+COPY infra/promtail/promtail-config.yml /etc/promtail/promtail-config.yaml
 
 # Promtail requires access to host logs.
 # In a highlu secured environment we would use ACLs.
