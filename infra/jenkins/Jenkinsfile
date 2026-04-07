@@ -14,6 +14,8 @@ pipeline {
                      echo 'Récupération du fichier .env depuis le volume partagé...'
                      sh "cp /tmp/.env.srm .env"
                      echo 'Fichier .env copié avec succès !'
+                     echo "Donner d'accès à Docker pour Jenkins..."
+                     sh "chmod 666 /var/run/docker.sock || true"
                 }
             }
         }
@@ -29,8 +31,8 @@ pipeline {
            steps {
              script{
                 echo 'Audit du code source encours...'
-                def scannerHome = tool "env.${SONAR_SCANNER_TOOL}"
-                withSonarQubeEnv("${SONAR_SERVER_NAME}"){
+                def scannerHome = tool name:"${env.SONAR_SCANNER_TOOL}"
+                withSonarQubeEnv("${env.SONAR_SERVER_NAME}"){
                         // We execute the scan for the entire from the root
                         sh "${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=srm-oriental-gateway -Dsonar.sources=. -Dsonar.host.url=http://localhost:9002"
                     }
