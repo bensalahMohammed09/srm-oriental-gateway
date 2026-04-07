@@ -9,7 +9,7 @@ pipeline {
     environment {
         SONAR_SCANNER_TOOL = 'sonar-scanner'
         SONAR_SERVER_NAME = 'sonarqube'
-        COMPOSE_PARALLEL_LIMIT = 1
+        DOCKER_BUILDKIT = '0' // Désactive BuildKit pour éviter les problèmes de compatibilité avec certains environnements Docker
     }
 
     stages{
@@ -76,7 +76,29 @@ pipeline {
             steps{
                 script{
                     echo "Build docker images ...."
-                    sh "docker compose --env-file .env build"
+                     def services = [
+                        'srm-db', 
+                        'sonar-db', 
+                        'sonarqube', 
+                        'srm-api', 
+                        'srm-dashboard', 
+                        'srm-ocr-worker', 
+                        'n8n', 
+                        'prometheus', 
+                        'loki', 
+                        'promtail', 
+                        'grafana', 
+                        'node-exporter'
+                    ]
+
+                    echo " Démarrage du build séquentiel de ${services.size()} services..."
+                    
+                    for (service in services) {
+                        echo " Construction du service : ${service}..."
+                        // On build chaque service individuellement
+                        sh "docker compose --env-file .env build ${service}"
+                        echo "Terminé : ${service}"
+                    }
                 }
             }
         }
