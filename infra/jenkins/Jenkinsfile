@@ -29,26 +29,28 @@ pipeline {
            steps {
              script{
                 echo 'Audit du code source encours...'
-             def scannerHome = tool "env.${SONAR_SCANNER_TOOL}"
-             withSonarQubeEnv("${SONAR_SERVER_NAME}"){
-                    // We execute the scan for the entire from the root
-                    sh "${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=srm-oriental-gateway -Dsonar.sources=. -Dsonar.host.url=http://localhost:9002"
-                }
+                def scannerHome = tool "env.${SONAR_SCANNER_TOOL}"
+                withSonarQubeEnv("${SONAR_SERVER_NAME}"){
+                        // We execute the scan for the entire from the root
+                        sh "${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=srm-oriental-gateway -Dsonar.sources=. -Dsonar.host.url=http://localhost:9002"
+                    }
              }
            }
         }
 
         stage('----- Quality Gate -----'){
             steps{
-                echo " Attente du verdict de qualité de SonarQube..."
-                timeout(time: 5, unit: 'MINUTES') {
-                    def qg = waitForQualityGate()
-                    if (qg.status != 'OK') {
-                        error "Échec du Quality Gate : ${qg.status}"
-                    } else {
-                        echo "Quality Gate réussi : ${qg.status}"
+               script{
+                    echo " Attente du verdict de qualité de SonarQube..."
+                    timeout(time: 5, unit: 'MINUTES') {
+                        def qg = waitForQualityGate()
+                        if (qg.status != 'OK') {
+                            error "Échec du Quality Gate : ${qg.status}"
+                        } else {
+                            echo "Quality Gate réussi : ${qg.status}"
+                        }
                     }
-                }
+               }
             }
         }
 
