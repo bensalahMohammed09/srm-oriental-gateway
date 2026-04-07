@@ -17,7 +17,7 @@ pipeline {
                             sh "git config --global --add safe.directory '*'"
                             deleteDir() // Nettoie le workspace pour éviter les conflits de fichiers 
                             echo 'Récupération du fichier .env depuis le volume partagé...'
-                            def envExists = shr(script: "test -f /tmp/.env.srm", returnStatus: true) == 0
+                            def envExists = sh(script: "test -f /tmp/.env.srm", returnStatus: true) == 0
                             if(envExists) {
                                 sh "cp /tmp/.env.srm ./.env"
                                 echo 'Fichier .env copié avec succès dans le workspace.'
