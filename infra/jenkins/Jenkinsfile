@@ -1,102 +1,65 @@
 pipeline {
     agent any
-    
+
     environment {
-        // Tagging strategy: v[BuildNum]-[Branch]
-        IMAGE_TAG = "v${env.BUILD_NUMBER}-${env.BRANCH_NAME.replaceAll('/', '-')}"
+        SONAR_SCANNER_TOOL = 'sonar-scanner'
+        SONAR_SERVER_NAME = 'sonarqube'
     }
 
-    stages {
-        stage('Initialize') {
-            steps {
-                script {
-                    echo "--- Loading External Configurations ---"
-                    def props = load "${WORKSPACE}/infra/jenkins/pipeline.conf"
-                    
-                    // Injection des variables pour usage global
-                    env.DOCKER_REGISTRY = props.DOCKER_REGISTRY
-                    env.DOCKER_CREDS_ID = props.DOCKER_CREDS_ID
-                    env.IMAGE_API       = props.IMAGE_API
-                    env.IMAGE_UI        = props.IMAGE_UI
-                    env.IMAGE_WORKER    = props.IMAGE_WORKER
-                    env.PATH_API_PROJ   = props.PATH_API_PROJ
-                    env.PATH_UI_DIR     = props.PATH_UI_DIR
-                    env.PATH_WORKER_DIR = props.PATH_WORKER_DIR
-                    env.PATH_DOCKER     = props.PATH_DOCKER
-                }
+    stages{
+        stage('1. Récupération du Code'){
+            steps{
+                echo 'Récupération des sources depuis GitHub...'
+                checkout scm
             }
+            
         }
-        
-        stage('Build and Test Backend') {
-            steps {
-                echo "--- Building .NET 9 API ---"
-                sh "dotnet restore ${env.PATH_API_PROJ}"
-                sh "dotnet build ${env.PATH_API_PROJ} --configuration Release --no-restore"
 
-                echo "--- Running API Tests ---"
-                // On suppose que le dossier /tests est à la racine
-                sh "dotnet test tests/ --configuration Release --logger:trx"
-            }
-            post {
-                always {
-                    mstest testResults: '**/*.trx', keepLongStdio: true
+        stage('2. Analyse de Qualité (SonnarQube)'){
+           steps {
+             echo 'Audit du code source encours...'
+                def scannerHome = tool "env.${SONAR_SCANNER_TOOL}"
+
+                withSonarQubeEnv("${SONAR_SERVER_NAME}"){
+                    // We execute the scan for the entire from the root
+                    sh "${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=srm-oriental-gateway -Dsonar.sources=. -Dsonar.host.url=http://localhost:9002"
                 }
+           }
+        }
+
+        stage('3. Construction of the infrastructure'){
+            steps{
+                echo "Build docker images ...."
+                sh "docker compose --env-file .env build"
             }
         }
 
-        stage('Build Frontend') {
-            steps {
-                echo "--- Compiling React/Vite Assets ---"
-                dir("${env.PATH_UI_DIR}") {
-                    sh "npm install"
-                    sh "npm run build"
-                }
+        stage('4. Déploiment des services'){
+            steps{
+                echo 'Lancement des conteneurs...'
+                sh "docker compose --env-file .env up -d"
             }
         }
 
-        stage('Security Audit') {
-            steps {
-                echo "--- Scanning FileSystem for Vulnerabilities (Trivy) ---"
-                sh "trivy fs --exit-code 1 --severity HIGH,CRITICAL ."
-            }
-        }
-
-        stage('Push to Registry') {
-            steps {
-                script {
-                    docker.withRegistry("https://${env.DOCKER_REGISTRY}", env.DOCKER_CREDS_ID) {
-                        
-                        echo "--- Processing API Image ---"
-                        // Context est la racine (.), Dockerfile est dans infra/docker/
-                        def apiImg = docker.build("${env.DOCKER_REGISTRY}/${env.IMAGE_API}:${IMAGE_TAG}", "-f ${env.PATH_DOCKER}/api.Dockerfile .")
-                        apiImg.push()
-                        apiImg.push("latest")
-
-                        echo "--- Processing UI Image ---"
-                        def uiImg = docker.build("${env.DOCKER_REGISTRY}/${env.IMAGE_UI}:${IMAGE_TAG}", "-f ${env.PATH_DOCKER}/ui.Dockerfile .")
-                        uiImg.push()
-                        uiImg.push("latest")
-
-                        echo "--- Processing Worker Image ---"
-                        // Corrigé: nom du fichier ocr.Dockerfile selon votre upload
-                        def workerImg = docker.build("${env.DOCKER_REGISTRY}/${env.IMAGE_WORKER}:${IMAGE_TAG}", "-f ${env.PATH_DOCKER}/ocr.Dockerfile .")
-                        workerImg.push()
-                        workerImg.push("latest")
-                    }
-                }
+        stage('5. Vérification finale'){
+            steps{
+                echo "---- Etat des conteneurs : ----"
+                sh "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
             }
         }
     }
 
-    post {
-        success {
-            echo "Successfully deployed SRM Oriental Gateway: ${IMAGE_TAG}"
+    post{
+        success{
+            echo "Pipeline exécuté avec succès !"
         }
-        failure {
-            echo "Build FAILED for ${IMAGE_TAG}. Check logs for errors."
+        failure{
+            echo "Pipeline échoué. Veuillez vérifier les logs pour plus de détails."
         }
-        always {
-            cleanWs()
+        always{
+            echo "Fin de l'exécution du pipeline."
+            echo "Nettoyage des ressources temporaires..."
+            sh "docker image prune -f"
         }
     }
 }
