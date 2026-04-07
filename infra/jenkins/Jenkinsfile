@@ -13,10 +13,12 @@ pipeline {
         stage('0. Préparation de l\'environnement'){
                 steps{
                     script{
-                        cleanWs() // Nettoie l'espace de travail pour éviter les conflits avec d'anciennes données  
-                        echo 'Récupération du fichier .env depuis le volume partagé...'
-                        sh "cp /tmp/.env.srm .env"
-                        echo 'Fichier .env copié avec succès !'
+                        script{
+                            cleanWs() // Nettoie l'espace de travail pour éviter les conflits avec d'anciennes données  
+                            echo 'Récupération du fichier .env depuis le volume partagé...'
+                            sh "cp /tmp/.env.srm .env"
+                            echo 'Fichier .env copié avec succès !'
+                        }
                 }
             }
         }
