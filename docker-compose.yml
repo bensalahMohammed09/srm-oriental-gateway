@@ -7,6 +7,7 @@ services:
       context: .
       dockerfile: infra/docker/jenkins.Dockerfile
     container_name: jenkins-srm
+    user: root # Nécessaire pour les permissions Docker
     ports:
       - "8085:8080"
       - "50000:50000"

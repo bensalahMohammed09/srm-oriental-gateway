@@ -25,11 +25,7 @@ RUN apt-get update && apt-get install -y \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Gestion des permissions pour le socket Docker
-RUN groupadd -g 999 docker || true \
-    && usermod -aG docker jenkins   
-
-USER jenkins
+USER root
 
 # Pré-installation des plugins essentiels pour ton PFE
 RUN jenkins-plugin-cli --plugins "workflow-aggregator:latest dark-theme:latest git:latest"

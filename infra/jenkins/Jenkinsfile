@@ -14,9 +14,6 @@ pipeline {
                      echo 'Récupération du fichier .env depuis le volume partagé...'
                      sh "cp /tmp/.env.srm .env"
                      echo 'Fichier .env copié avec succès !'
-                     echo "Donner d'accès à Docker pour Jenkins..."
-                     sh "sudo chmod 666 /var/run/docker.sock || chmod 666 /var/run/docker.sock || true"
-                }
             }
         }
         stage('1. Récupération du Code'){
