@@ -71,7 +71,7 @@ pipeline {
         stage('3. Construction of the infrastructure'){
             steps{
                 echo "Build docker images ...."
-                sh "docker compose --env-file .env build"
+                sh "docker compose --env-file .env build --parallel 1"
             }
         }
 
