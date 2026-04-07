@@ -3,7 +3,7 @@ pipeline {
 
     options{
         disableConcurrentBuilds() // Empêche l'exécution concurrente de plusieurs builds du même pipeline
-        timeout(time: 1, hours: true) // Définit un délai d'exécution maximum pour le pipeline
+        timeout(time: 1, unit: 'HOURS') // Définit un délai d'exécution maximum pour le pipeline
     }
 
     environment {
