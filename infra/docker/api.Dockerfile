@@ -2,7 +2,7 @@
 # Using ARG for versioning to avoid hard-typing
 ARG DOTNET_VERSION
 FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS build
-WORKDIR /src
+WORKDIR /app
 
 # 1. Copy the project file specifically for restore (better caching)
 # Local path: src/backend/Srm.Gateway.Api/Srm.Gateway.Api.csproj
@@ -17,7 +17,7 @@ COPY src/backend/ .
 # 4. Set WORKDIR to where the API project now sits inside the container
 # Since we copied to '.', the 'Srm.Gateway.Api' folder is in the current directory
 WORKDIR "/src/backend/Srm.Gateway.Api"
-RUN dotnet publish "Srm.Gateway.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish  -c Release -o /out
 
 # --- 2. Runtime stage ---
 FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION} AS runtime
