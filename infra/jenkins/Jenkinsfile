@@ -37,6 +37,20 @@ pipeline {
            }
         }
 
+        stage('----- Quality Gate -----'){
+            steps{
+                echo " Attente du verdict de qualité de SonarQube..."
+                timeout(time: 5, unit: 'MINUTES') {
+                    def qg = waitForQualityGate()
+                    if (qg.status != 'OK') {
+                        error "Échec du Quality Gate : ${qg.status}"
+                    } else {
+                        echo "Quality Gate réussi : ${qg.status}"
+                    }
+                }
+            }
+        }
+
         stage('3. Construction of the infrastructure'){
             steps{
                 echo "Build docker images ...."
