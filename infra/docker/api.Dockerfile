@@ -12,7 +12,7 @@ RUN dotnet restore "backend/Srm.Gateway.Api/Srm.Gateway.Api.csproj"
 COPY src/backend/ .
 
 # Publish the application in Release mode 
-WORKDIR "/src/backend/Srm.Gateway.Api"
+WORKDIR "src/backend/Srm.Gateway.Api"
 RUN dotnet publish "Srm.Gateway.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 # --- 2. Runtime stage ---
