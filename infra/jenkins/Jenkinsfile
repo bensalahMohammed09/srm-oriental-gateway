@@ -9,11 +9,12 @@ pipeline {
     stages{
 
         stage('0. Préparation de l\'environnement'){
-            steps{
-                script{
-                     echo 'Récupération du fichier .env depuis le volume partagé...'
-                     sh "cp /tmp/.env.srm .env"
-                     echo 'Fichier .env copié avec succès !'
+                steps{
+                    script{
+                        echo 'Récupération du fichier .env depuis le volume partagé...'
+                        sh "cp /tmp/.env.srm .env"
+                        echo 'Fichier .env copié avec succès !'
+                }
             }
         }
         stage('1. Récupération du Code'){
