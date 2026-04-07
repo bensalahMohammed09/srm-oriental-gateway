@@ -38,7 +38,7 @@ EXPOSE ${API_INTERNAL_PORT}
 USER $APP_UID
 
 # Copy the published output from the build stage
-COPY --from=build /app/publish .
+COPY --from=build /out .
 
 # Set the entry point to run the application
 
