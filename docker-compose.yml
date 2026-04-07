@@ -1,22 +1,22 @@
 version: '3.8'
 
 services:
- # -------- JENKINS --------
+  # -------- JENKINS --------
   jenkins-srm:
     build:
       context: .
       dockerfile: infra/docker/jenkins.Dockerfile
     container_name: jenkins-srm
-    user: root # Nécessaire pour les permissions Docker
+    user: root
     ports:
       - "8085:8080"
       - "50000:50000"
     volumes:
       - jenkins-srm_data:/var/jenkins_home
-      - /var/run/docker.sock:/var/run/docker.sock # Permet à Jenkins de lancer des conteneurs Docker
+      - /var/run/docker.sock:/var/run/docker.sock
       - ./.env:/tmp/.env.srm
     environment:
-      - JAVA_OPTS=-Xmx512m -Xms512m # Limite la mémoire de Jenkins pour éviter les débordements
+      - JAVA_OPTS=-Xmx512m -Xms512m
     deploy:
       resources:
         limits:
@@ -24,6 +24,7 @@ services:
     networks:
       - sec-net
       - ops-net
+
   # 1. API
   srm-api:
     build:
@@ -39,7 +40,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M # .NET est efficace, 512Mo suffisent pour le PFE
+          memory: 512M
     networks:
       - web-net
       - back-net
@@ -62,7 +63,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128M # Nginx est extrêmement léger
+          memory: 128M
     networks:
       - web-net
 
@@ -80,7 +81,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G # L'OCR (Tesseract/Python) peut être gourmand lors du traitement
+          memory: 1G
     networks:
       - back-net
       - ops-net
@@ -106,7 +107,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M # Stable pour une base de données de développement
+          memory: 512M
     networks:
       - back-net
 
@@ -125,7 +126,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G # Node.js (n8n) nécessite un peu d'espace pour les workflows
+          memory: 1G
     networks:
       - back-net
     volumes:
@@ -160,7 +161,7 @@ services:
         LOKI_INTERNAL_PORT: ${LOKI_INTERNAL_PORT}
     container_name: loki
     ports:
-    - "${LOKI_EXTERNAL_PORT}:${LOKI_INTERNAL_PORT}"
+      - "${LOKI_EXTERNAL_PORT}:${LOKI_INTERNAL_PORT}"
     deploy:
       resources:
         limits:
@@ -221,7 +222,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 64M # Très léger
+          memory: 64M
     networks:
       - ops-net
 
@@ -268,7 +269,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G # Indispensable pour SonarQube
+          memory: 2G
     ports:
       - "${SONAR_EXTERNAL_PORT}:${SONAR_INTERNAL_PORT}"
     networks:
