@@ -4,15 +4,19 @@ ARG DOTNET_VERSION
 FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS build
 WORKDIR /src
 
-# Optimization: Restore Nuget packages using dynamic paths
-COPY ["src/backend/Srm.Gateway.Api.csproj", "backend/Srm.Gateway.Api/"]
+# 1. Copy the project file specifically for restore (better caching)
+# Local path: src/backend/Srm.Gateway.Api/Srm.Gateway.Api.csproj
+COPY ["src/backend/Srm.Gateway.Api/Srm.Gateway.Api.csproj", "backend/Srm.Gateway.Api/"]
+
+# 2. Restore dependencies
 RUN dotnet restore "backend/Srm.Gateway.Api/Srm.Gateway.Api.csproj"
 
-# Copy source code
+# 3. Copy the entire backend source
 COPY src/backend/ .
 
-# Publish the application in Release mode 
-WORKDIR "src/backend/Srm.Gateway.Api"
+# 4. Set WORKDIR to where the API project now sits inside the container
+# Since we copied to '.', the 'Srm.Gateway.Api' folder is in the current directory
+WORKDIR "/src/backend/Srm.Gateway.Api"
 RUN dotnet publish "Srm.Gateway.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 # --- 2. Runtime stage ---
