@@ -1,11 +1,15 @@
 pipeline {
     agent any
 
-   
+    options{
+        disableConcurrentBuilds() // Empêche l'exécution concurrente de plusieurs builds du même pipeline
+        timeout(time: 1, hours: true) // Définit un délai d'exécution maximum pour le pipeline
+    }
 
     environment {
         SONAR_SCANNER_TOOL = 'sonar-scanner'
         SONAR_SERVER_NAME = 'sonarqube'
+        COMPOSE_PARALLEL_LIMIT = 1
     }
 
     stages{
