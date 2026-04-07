@@ -1,6 +1,27 @@
 version: '3.8'
 
 services:
+ # -------- JENKINS --------
+  jenkins-srm:
+    build:
+      context: .
+      dockerfile: infra/docker/jenkins.Dockerfile
+    container_name: jenkins-srm
+    ports:
+      - "8085:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins-srm_data:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock # Permet à Jenkins de lancer des conteneurs Docker
+    environment:
+      - JAVA_OPTS=-Xmx512m -Xms512m # Limite la mémoire de Jenkins pour éviter les débordements
+    deploy:
+      resources:
+        limits:
+          memory: 1.5G 
+    networks:
+      - sec-net
+      - ops-net
   # 1. API
   srm-api:
     build:
@@ -13,6 +34,10 @@ services:
     container_name: srm-api
     ports:
       - "${API_EXTERNAL_PORT}:${API_INTERNAL_PORT}"
+    deploy:
+      resources:
+        limits:
+          memory: 512M # .NET est efficace, 512Mo suffisent pour le PFE
     networks:
       - web-net
       - back-net
@@ -32,6 +57,10 @@ services:
     container_name: srm-dashboard
     ports:
       - "${DASHBOARD_EXTERNAL_PORT}:${DASHBOARD_INTERNAL_PORT}"
+    deploy:
+      resources:
+        limits:
+          memory: 128M # Nginx est extrêmement léger
     networks:
       - web-net
 
@@ -46,6 +75,10 @@ services:
         SRM_GROUP_ID: ${SRM_GROUP_ID}
         WORKER_ENV: ${WORKER_ENV}
     container_name: srm-ocr-worker
+    deploy:
+      resources:
+        limits:
+          memory: 1G # L'OCR (Tesseract/Python) peut être gourmand lors du traitement
     networks:
       - back-net
       - ops-net
@@ -68,6 +101,10 @@ services:
       - "${DB_EXTERNAL_PORT}:${DB_INTERNAL_PORT}"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 512M # Stable pour une base de données de développement
     networks:
       - back-net
 
@@ -83,6 +120,10 @@ services:
     container_name: n8n
     ports:
       - "${N8N_EXTERNAL_PORT}:${N8N_INTERNAL_PORT}"
+    deploy:
+      resources:
+        limits:
+          memory: 1G # Node.js (n8n) nécessite un peu d'espace pour les workflows
     networks:
       - back-net
     volumes:
@@ -99,6 +140,10 @@ services:
     container_name: prometheus
     ports:
       - "${PROMETHEUS_EXTERNAL_PORT}:${PROMETHEUS_INTERNAL_PORT}"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     networks:
       - ops-net
     volumes:
@@ -112,6 +157,12 @@ services:
         LOKI_VERSION: ${LOKI_VERSION}
         LOKI_INTERNAL_PORT: ${LOKI_INTERNAL_PORT}
     container_name: loki
+    ports:
+    - "${LOKI_EXTERNAL_PORT}:${LOKI_INTERNAL_PORT}"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     networks:
       - ops-net
     volumes:
@@ -128,6 +179,10 @@ services:
     container_name: grafana
     ports:
       - "${GRAFANA_EXTERNAL_PORT}:${GRAFANA_INTERNAL_PORT}"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     networks:
       - ops-net
     volumes:
@@ -141,6 +196,10 @@ services:
         PROMTAIL_VERSION: ${PROMTAIL_VERSION}
         PROMTAIL_INTERNAL_PORT: ${PROMTAIL_INTERNAL_PORT}
     container_name: promtail
+    deploy:
+      resources:
+        limits:
+          memory: 128M
     networks:
       - ops-net
     volumes:
@@ -157,28 +216,14 @@ services:
     container_name: node-exporter
     ports:
       - "${NODE_EXPORTER_EXTERNAL_PORT}:${NODE_EXPORTER_INTERNAL_PORT}"
+    deploy:
+      resources:
+        limits:
+          memory: 64M # Très léger
     networks:
       - ops-net
 
   # ---- QUALITY ----
-  sonarqube:
-    build:
-      context: .
-      dockerfile: infra/docker/sonarqube.Dockerfile
-      args:
-        SONAR_VERSION: ${SONAR_VERSION}
-        SONAR_INTERNAL_PORT: ${SONAR_INTERNAL_PORT}
-        SONAR_JDBC_USERNAME: ${SONAR_JDBC_USERNAME}
-        SONAR_JDBC_PASSWORD: ${SONAR_JDBC_PASSWORD}
-        SONAR_JDBC_URL: ${SONAR_JDBC_URL}
-    container_name: sonarqube
-    ports:
-      - "${SONAR_EXTERNAL_PORT}:${SONAR_INTERNAL_PORT}"
-    networks:
-      - sec-net
-    depends_on:
-      - sonar-db
-
   sonar-db:
     build: 
       context: .
@@ -192,10 +237,42 @@ services:
     container_name: sonar-db
     ports:
       - "${SONAR_DB_EXTERNAL_PORT}:${SONAR_DB_INTERNAL_PORT}"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     networks:
       - sec-net
     volumes:
       - sonar_db_data:/var/lib/postgresql/data
+
+  sonarqube:
+    build:
+      context: .
+      dockerfile: infra/docker/sonarqube.Dockerfile
+      args:
+        SONAR_VERSION: ${SONAR_VERSION}
+        SONAR_INTERNAL_PORT: ${SONAR_INTERNAL_PORT}
+        SONAR_JDBC_USERNAME: ${SONAR_JDBC_USERNAME}
+        SONAR_JDBC_PASSWORD: ${SONAR_JDBC_PASSWORD}
+        SONAR_DB_INTERNAL_PORT: ${SONAR_DB_INTERNAL_PORT}
+        SONAR_DB_NAME: ${SONAR_DB_NAME}
+        SONAR_JDBC_URL: ${SONAR_JDBC_URL}
+    container_name: sonarqube
+    environment:
+      - SONAR_WEB_JAVAOPTS=-Xmx512m -Xms512m
+      - SONAR_CE_JAVAOPTS=-Xmx512m -Xms512m
+      - SONAR_SEARCH_JAVAOPTS=-Xmx512m -Xms512m 
+    deploy:
+      resources:
+        limits:
+          memory: 2G # Indispensable pour SonarQube
+    ports:
+      - "${SONAR_EXTERNAL_PORT}:${SONAR_INTERNAL_PORT}"
+    networks:
+      - sec-net
+    depends_on:
+      - sonar-db
 
 # Networks & Volumes
 networks:
@@ -205,6 +282,7 @@ networks:
   sec-net:
 
 volumes:
+  jenkins-srm_data:
   postgres_data:
   n8n_data:
   prometheus_data:
