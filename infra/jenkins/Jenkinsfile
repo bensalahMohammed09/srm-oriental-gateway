@@ -16,22 +16,25 @@ pipeline {
                         script{
                             sh "git config --global --add safe.directory '*'"
                             deleteDir() // Nettoie le workspace pour éviter les conflits de fichiers 
-                            echo 'Récupération du fichier .env depuis le volume partagé...'
-                            def envExists = sh(script: "test -f /tmp/.env.srm", returnStatus: true) == 0
-                            if(envExists) {
-                                sh "cp /tmp/.env.srm ./.env"
-                                echo 'Fichier .env copié avec succès dans le workspace.'
-                            } else {
-                                echo 'Aucun fichier .env trouvé dans le volume partagé. Assurez-vous que le fichier .env est présent dans le volume de Jenkins.'
-                            }
+                            
                         }
                 }
             }
         }
         stage('1. Récupération du Code'){
             steps{
-                echo 'Récupération des sources depuis GitHub...'
-                checkout scm
+                script{
+                        echo 'Récupération des sources depuis GitHub...'
+                        checkout scm
+                        echo 'Récupération du fichier .env depuis le volume partagé...'
+                        def envExists = sh(script: "test -f /tmp/.env.srm", returnStatus: true) == 0
+                        if(envExists) {
+                        sh "cp /tmp/.env.srm ./.env"
+                        echo 'Fichier .env copié avec succès dans le workspace.'
+                        } else {
+                        echo 'Aucun fichier .env trouvé dans le volume partagé. Assurez-vous que le fichier .env est présent dans le volume de Jenkins.'
+                        }
+                }
             }
             
         }
