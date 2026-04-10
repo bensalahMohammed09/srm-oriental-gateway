@@ -1,134 +1,68 @@
-pipeline {
+pipeline{
     agent any
 
-    options{
-        disableConcurrentBuilds() // Empêche l'exécution concurrente de plusieurs builds du même pipeline
-        timeout(time: 1, unit: 'HOURS') // Définit un délai d'exécution maximum pour le pipeline
-    }
-
-    environment {
-        SONAR_SCANNER_TOOL = 'sonar-scanner'
-        SONAR_SERVER_NAME = 'sonarqube'
-        DOCKER_BUILDKIT = '0' // Désactive BuildKit pour éviter les problèmes de compatibilité avec certains environnements Docker
+    // Global flags for the pipeline orchestration
+    environment{
+        BUILD_BACKEND = "false"
+        BUILD_FRONTEND = "false"
+        BUILD_WORKERS = "false"
+        FORCE_ALL = "false"
     }
 
     stages{
-
-        stage('0. Préparation de l\'environnement'){
-                steps{
-                    script{
-                        script{
-                            sh "git config --global --add safe.directory '*'"
-                            deleteDir() // Nettoie le workspace pour éviter les conflits de fichiers 
-                            
-                        }
-                }
-            }
-        }
-        stage('1. Récupération du Code'){
+        stage('Step 1.1: Path Detection & Workspace Preparation'){
             steps{
                 script{
-                        echo 'Récupération des sources depuis GitHub...'
-                        checkout scm
-                        echo 'Récupération du fichier .env depuis le volume partagé...'
-                        def envExists = sh(script: "test -f /tmp/.env.srm", returnStatus: true) == 0
-                        if(envExists) {
-                        sh "cp /tmp/.env.srm ./.env"
-                        echo 'Fichier .env copié avec succès dans le workspace.'
-                        } else {
-                        echo 'Aucun fichier .env trouvé dans le volume partagé. Assurez-vous que le fichier .env est présent dans le volume de Jenkins.'
+                    // 1. Manual Cleanup
+                    // Ensures a stateless environment by removing all files 
+                    echo "Cleaning workspace..."
+                    sh "rm -rf *"
+
+                    // 2. Fresh Checkout
+                    checkout scm
+
+                    // 3. Change Detection Logic
+                    // Compare the current commit against the last successfull one 
+                    def lastSuccess = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: "HEAD~1"
+                    def changedFiles = sh(script: "git diff --name-only ${lastSuccess} ${env.GIT_COMMIT}",returnStdout: true)
+
+                    echo "Checking changes between ${lastSuccess} and current commit..."
+                    for (file in changedFiles){
+                        echo "Detected change in: ${file}"
+
+                        // Global Trigger: Changes in core infra or jenkins config force a full system rebuild
+                        if(file.startsWith('infra/') || file.endsWith('Jenkinsfile') || file.endsWith('docker-compose.yml')){
+                            echo "CRITICAL: Global configuration change detected (${file}) forcing Full Rebuild."
+                            BUILD_BACKEND = "true"
+                            BUILD_FRONTEND = "true"
+                            BUILD_WORKERS = "true"
+                            FORCE_ALL = "true"
+                            break
                         }
-                }
-            }
-            
-        }
 
-        stage('2. Analyse de Qualité (SonnarQube)'){
-           steps {
-             script{
-                echo 'Audit du code source encours...'
-                def scannerHome = tool name:"${env.SONAR_SCANNER_TOOL}"
-                withSonarQubeEnv("${env.SONAR_SERVER_NAME}"){
-                        // We execute the scan for the entire from the root
-                        sh "${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=srm-oriental-gateway -Dsonar.sources=. -Dsonar.host.url=http://sonarqube:9002"
-                    }
-             }
-           }
-        }
-
-        // stage('----- Quality Gate -----'){
-        //     steps{
-        //        script{
-        //             echo " Attente du verdict de qualité de SonarQube..."
-        //            try {
-        //                 timeout(time: 5, unit: 'MINUTES'){
-        //                     def qg = waitForQualityGate()
-        //                     echo "Qualité Gate Status: ${qg.status}"
-        //                 }
-        //             }catch(e) {
-        //                 echo "---Attention : échec de la connexion à SonarQube ou délai dépassé. Vérifiez que SonarQube est opérationnel.---"
-        //             }      
-        //        }
-        //     }
-        // }
-
-        stage('3. Construction of the infrastructure'){
-            steps{
-                script{
-                    echo "Build docker images ...."
-                     def services = [
-                        'srm-db', 
-                        'sonar-db', 
-                        'sonarqube', 
-                        'srm-api', 
-                        'srm-dashboard', 
-                        'srm-ocr-worker', 
-                        'n8n', 
-                        'prometheus', 
-                        'loki', 
-                        'promtail', 
-                        'grafana', 
-                        'node-exporter'
-                    ]
-
-                    echo " Démarrage du build séquentiel de ${services.size()} services..."
-                    
-                    for (service in services) {
-                        echo " Construction du service : ${service}..."
-                        // On build chaque service individuellement
-                        sh "docker compose --env-file .env build ${service}"
-                        echo "Terminé : ${service}"
+                        //Component-specific check
+                        if(file.startsWith('src/backend/')){
+                            env.BUILD_BACKEND = "true"
+                        }
+                        if(file.startsWith('src/frontend/')){
+                            env.BUILD_FRONTEND = "true"
+                        }
+                        if(file.startsWith('src/workers/')){
+                            env.BUILD_WORKERS = "true"
+                        }
                     }
                 }
             }
         }
 
-        stage('4. Déploiment des services'){
+        stage('Step 1.1: Verification'){
             steps{
-                echo 'Lancement des conteneurs...'
-                sh "docker compose --env-file .env up -d"
+                echo "--- Final Build Decisions ---"
+                echo "Run Backend Pipeline: ${env.BUILD_BACKEND}"
+                echo "Run Frontend Pipeline: ${env.BUILD_FRONTEND}"
+                echo "Run Workers Pipeline: ${env.BUILD_WORKERS}"
+                echo "Force Full Rebuild: ${env.FORCE_ALL}"
             }
-        }
-
-        stage('5. Vérification finale'){
-            steps{
-                echo "---- Etat des conteneurs : ----"
-                sh "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
-            }
-        }
-    }
-
-    post{
-        success{
-            echo "Pipeline exécuté avec succès !"
-        }
-        failure{
-            echo "Pipeline échoué. Veuillez vérifier les logs pour plus de détails."
-        }
-        always{
-            echo "Fin de l'exécution du pipeline."
-            echo "Nettoyage des ressources temporaires..."
-            sh "docker image prune -f"
         }
     }
 }
