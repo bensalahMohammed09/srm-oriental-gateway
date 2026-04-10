@@ -1,54 +1,58 @@
-# ---  GLOBAL ARGS (Available across all stages) ---
+# --- GLOBAL ARGS (Provided by .env -> docker-compose) ---
 ARG DOTNET_VERSION
 ARG API_INTERNAL_PORT
 ARG API_ENV
 
-# --- Stage 1: BUILD ---
+# --- STAGE 1: BUILD ---
 FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS build-env
 WORKDIR /app
 
-# Leverage Docker layer caching by copying files individually
-# This prevent a full restore if only code changes, not dependencies
+# 1. Cache optimization: Copy solution and project files first
 COPY Srm.Gateway.sln ./
-COPY Srm.Gateway.Domain/*.csproj ./Srm.Gateway.Domain
-COPY Srm.Gateway.Infrastructure/*.csproj ./Srm.Gateway.Infrastructure
-COPY Srm.Gateway.Application/*.csproj ./Srm.Gateway.Application
-COPY Srm.Gateway.Api/*.csproj ./Srm.Gateway.Api
+COPY Srm.Gateway.Domain/Srm.Gateway.Domain.csproj ./Srm.Gateway.Domain/
+COPY Srm.Gateway.Application/Srm.Gateway.Application.csproj ./Srm.Gateway.Application/
+COPY Srm.Gateway.Infrastructure/Srm.Gateway.Infrastructure.csproj ./Srm.Gateway.Infrastructure/
+COPY Srm.Gateway.Api/Srm.Gateway.Api.csproj ./Srm.Gateway.Api/
 
-# Restore dependencies
+# 2. Restore dependencies
 RUN dotnet restore
 
-# Copy source code
+# 3. Copy actual source code
 COPY . .
 
-# Publish the application
-WORKDIR /app/Srm.Gateway.Api
-RUN dotnet publish -c Release -o /out --no-restore
+# 4. Publish (STAY at /app root to keep project references intact)
+RUN dotnet publish Srm.Gateway.Api/Srm.Gateway.Api.csproj \
+    -c Release \
+    -o /out 
 
-# --- Stage 2: RUNTIME
+# --- STAGE 2: RUNTIME ---
 FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION}
+
+# Re-declare ARGs to pull them into this stage scope
+ARG API_INTERNAL_PORT
+ARG API_ENV
+
 WORKDIR /app
 
-// Environment Variables Injecting to the container from the build environment
+# Mapping to ENV for the application runtime
 ENV ASPNETCORE_ENVIRONMENT=${API_ENV}
 ENV ASPNETCORE_HTTP_PORTS=${API_INTERNAL_PORT}
 
-# Install curl for healthchecks then cleanup to reduce attack surface
+# Security: Install curl for Healthchecks and clean up cache
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
-    && rm -rf /var/lib/list/*
+    && rm -rf /var/lib/apt/lists/*
 
-# Switch to non-root user 
-# We use Build-in 'app' user provided by microsoft in .NET images
+# Security: Switch to the built-in non-root 'app' user
 USER app
 
-# Copy only the necessary artifacts from the build stage 
+# Copy artifacts and apply ownership to the 'app' user
 COPY --from=build-env --chown=app:app /out .
 
+# Document the port
 EXPOSE ${API_INTERNAL_PORT}
 
-# Ensure that the container is actually healthy 
+# Healthcheck detail for Prometheus/Docker monitoring
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
     CMD curl -f http://localhost:${API_INTERNAL_PORT}/health || exit 1
 
-ENTRYPOINT ["dotnet","Srm.Gateway.Api.dll"]
-
+ENTRYPOINT ["dotnet", "Srm.Gateway.Api.dll"]

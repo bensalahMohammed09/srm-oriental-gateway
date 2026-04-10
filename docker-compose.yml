@@ -28,8 +28,8 @@ services:
   # 1. API
   srm-api:
     build:
-      context: .
-      dockerfile: infra/docker/api.Dockerfile
+      context: ./src/backend
+      dockerfile: ../../infra/docker/api.Dockerfile
       args:
         DOTNET_VERSION: ${DOTNET_VERSION}
         API_INTERNAL_PORT: ${API_INTERNAL_PORT}

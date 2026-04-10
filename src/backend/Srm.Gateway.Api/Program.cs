@@ -19,6 +19,10 @@ builder.Services.AddOpenApi();
 builder.Services.AddCors(options =>
     options.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
 
+// Healthckeck 
+builder.Services.AddHealthChecks();
+
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -41,5 +45,7 @@ using (var scope = app.Services.CreateScope())
     var srmContext = scope.ServiceProvider.GetRequiredService<SrmDbContext>();
     DbInitializer.Seed(srmContext);
 }
+
+app.MapHealthChecks("/health");
 
 app.Run();
