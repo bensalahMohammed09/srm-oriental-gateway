@@ -25,7 +25,7 @@ RUN apt-get update && apt-get install -y \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-USER root
 
-# Pré-installation des plugins essentiels pour ton PFE
-RUN jenkins-plugin-cli --plugins "workflow-aggregator:latest dark-theme:latest git:latest"
+
+# 3. Install SonarScanner as a global tool
+RUN dotnet tool install --global dotnet-sonarscanner

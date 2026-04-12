@@ -2,7 +2,7 @@ pipeline{
     agent any
 
     stages{
-        stage('0. Préparation de l\'environnement'){
+        stage('Step 0: Prep Environment & Secret Injection'){
                 steps{
                     script{
                         script{
@@ -11,6 +11,18 @@ pipeline{
 
                             // 1. Fresh Checkout
                             checkout scm
+
+                            //Define the source and destination
+                            def sharedPath = "tmp/.env.srm"
+                            def localPath = "./env"
+
+                            echo "Checking for environment secrets at ${sharedPath}...."
+                            if(fileExists(sharedPath)) {
+                                sh "cp ${sharedPath} ${localPath}"
+                                echo "SUCCESS: .env file injected into workspace."
+                            }else{
+                                error "STOP: Required .env file NOT FOUND at ${sharedPath}. Please mount the volume correctly!"
+                            }
                             
                         }
                 }
