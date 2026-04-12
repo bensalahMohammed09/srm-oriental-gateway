@@ -64,5 +64,93 @@ pipeline{
                 echo "Force Full Rebuild: ${env.FORCE_ALL}"
             }
         }
+
+        stage('Step 1.2: Backend Analysis & Quality Gate'){
+            when{
+                expression { env.BUILD_BACKEND == "true"}
+            }
+            steps{
+                script{
+                    echo "Orchestrating Quality Services (SonarQube) ...."
+
+                    // Dynamic Service Startup
+                    sh "docker start sonar-db sonarqube"
+
+                    echo "Waiting for SonarQube to wake up...."
+                    sh 'timeout 120s bash -c "until curl -s http://sonarqube:9002/api/system/status | grep -q UP; do sleep 5; done"'
+
+                    // Execution of Deep Analysis
+                    withCredentials([string(credentialsId: 'sonarqube-token',variable: 'SONAR_AUTH_TOKEN')]) {
+                        withSonarQubeEnv('SonarQube'){
+                            sh """
+                                dotnet sonarscanner begin /k:"srm-backend" \
+                                /d:sonar.login="${SONAR_AUTH_TOKEN}" \
+                                /d:sonar.host.url="http://sonarqube:9002" \
+                                /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml"
+
+                                dotnet build src/backend/Srm.Gateway.sln --configuration Release
+
+                                dotnet sonarscanner end /d:sonar.login="${SONAR_AUTH_TOKEN}"
+                            """
+
+                        }
+                    }
+
+                    // CRITICAL: This part forces Jenkins to wait for SonarQube's status
+                    //If the Quality Gate fails, the pipeline will stop here with an error
+                    timeout(time: 5,unit: 'MINUTES'){
+                        def qg = waitForQualityGate()
+                        if(qg.status != 'OK'){
+                            error "Pipeline aborted due to quality gate failure: ${qg.status}"
+                        }
+                    }
+
+                    // Stopping the services to free System resources
+                    echo "Analysis successful. Stopping services...."
+                    sh "docker stop sonar-db sonarqube"
+                }
+            }
+        }
+
+        stage('Step 1.2: Frontend Security (NPM Audit)'){
+            when{
+                expression { env.BUILD_FRONTEND == true}
+            }
+            steps{
+                script{
+                    echo "Checking Frontend dependencies for vulnerabilities...."
+                    dir('src/frontend'){
+                        // Fail the build if High or Critical vulnerabilities are found
+                        sh "npm audit --audit-level=high"
+                    }
+                }
+            }
+        }
+
+        stage('Step 1.2: Worker Security Scan (Python)'){
+            when{
+                expression { env.BUILD_WORKER == true}
+            }
+            steps{
+                script{
+                    echo "Scanning Pythong Worker for security vulnerabilities...."
+                    dir('src/workers/ocr-service'){
+                        // Static security analysis for python code
+                        sh "pip install bandit safety"
+                        sh "bandit -r . -ll"
+                        sh "safety check"
+                    }
+                }
+            }
+        }
+
+        stage('Step 1.2: Global Secret Scan (Trivy)'){
+            steps{
+                script{
+                    echo "Final check fo hardcoded secrets across the repository..."
+                    sh "trivy fs --severity HIGH,CRITICAL --exit-code 1 ."
+                }
+            }
+        }
     }
 }
