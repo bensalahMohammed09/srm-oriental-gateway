@@ -29,3 +29,4 @@ RUN apt-get update && apt-get install -y \
 
 # 3. Install SonarScanner as a global tool
 RUN dotnet tool install --global dotnet-sonarscanner
+ENV PATH="$PATH:/root/.dotnet/tools"
