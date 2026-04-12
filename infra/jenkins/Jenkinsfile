@@ -13,7 +13,7 @@ pipeline{
                             checkout scm
 
                             //Define the source and destination
-                            def sharedPath = "tmp/.env.srm"
+                            def sharedPath = "/tmp/.env.srm"
                             def localPath = "./env"
 
                             echo "Checking for environment secrets at ${sharedPath}...."
