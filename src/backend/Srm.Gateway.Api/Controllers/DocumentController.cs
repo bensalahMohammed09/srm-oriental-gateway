@@ -17,4 +17,10 @@ public class DocumentController(IDocumentService service) : ControllerBase
         var doc = await service.GetByReferenceAsync(reference);
         return doc != null ? Ok(doc) : NotFound();
     }
+    [HttpGet("debug-exception")]
+    public IActionResult TriggerError()
+    {
+        // On simule une erreur critique de logique ou de base de données
+        throw new Exception("Simulated error for SRM Oriental Gateway observability test.");
+    }
 }

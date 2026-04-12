@@ -1,51 +1,80 @@
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
+using Serilog;
+using Serilog.Events;
+using Serilog.Formatting.Json;
+using Srm.Gateway.Api.Middlewares;
+using Srm.Gateway.Application.Interfaces;
 using Srm.Gateway.Infrastructure.Data;
+using Srm.Gateway.Infrastructure.Services;
+using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// --- 1. LOGGING CONFIGURATION (SERILOG) ---
+// Configure Serilog to write structured JSON logs to the console for Loki/Promtail
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
+    .Enrich.FromLogContext()
+    .WriteTo.Console(new JsonFormatter())
+    .CreateLogger();
+
+builder.Host.UseSerilog();
+
+// --- 2. SERVICE COLLECTION (DEPENDENCY INJECTION) ---
+builder.Services.AddControllers();
+
 // Database Configuration
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<SrmDbContext>(options =>
     options.UseNpgsql(connectionString)
-    .UseSnakeCaseNamingConvention());
+           .UseSnakeCaseNamingConvention()); // Map C# PascalCase to Postgres snake_case
 
-builder.Services.AddControllers();
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
+// Application Services (Fixing your DI issue)
+builder.Services.AddScoped<IDocumentService, DocumentService>();
+
+// Documentation & OpenApi (Scalar)
 builder.Services.AddOpenApi();
 
-// CORS for React Dashboard
-builder.Services.AddCors(options =>
-    options.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
-
-// Healthckeck 
-builder.Services.AddHealthChecks();
-
+// CORS (Essential for React Dashboard)
+builder.Services.AddCors(options => {
+    options.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
+});
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// --- 3. MIDDLEWARE PIPELINE ORDER (SRE BEST PRACTICES) ---
+
+
+
+// B. Monitoring: UseHttpMetrics captures response times and status codes
+app.UseHttpMetrics();
+
+// A. Global Exception Handler: MUST be first to catch errors from all subsequent layers
+app.UseMiddleware<ExceptionMiddleware>();
+
+// C. Logging: UseSerilogRequestLogging creates a single log entry per request
+app.UseSerilogRequestLogging();
+
+// D. Security & Routing
+app.UseRouting();
+app.UseCors();
+app.UseAuthorization();
+
+// --- 4. ENDPOINT MAPPING ---
+
 if (app.Environment.IsDevelopment())
 {
+    // Native .NET 9 OpenAPI document
     app.MapOpenApi();
-
+    // Modern API UI (Scalar) available at /scalar/v1
     app.MapScalarApiReference();
 }
 
-app.UseHttpsRedirection();
+// Prometheus Endpoint: Where the scraper collects metrics
+app.MapMetrics();
 
-app.UseAuthorization();
-
+// API Controllers
 app.MapControllers();
-
-// Database Initialization (Seed data )
-using (var scope = app.Services.CreateScope())
-{
-    var srmContext = scope.ServiceProvider.GetRequiredService<SrmDbContext>();
-    DbInitializer.Seed(srmContext);
-}
-
-app.MapHealthChecks("/health");
 
 app.Run();

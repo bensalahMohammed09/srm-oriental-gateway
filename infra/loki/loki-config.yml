@@ -1,30 +1,50 @@
+# --- CONFIGURATION GLOBALE LOKI ---
+# Loki est le moteur de centralisation des logs (le "Prometheus des logs").
+
+# Désactivation de l'authentification multi-tenant pour simplifier le projet local (PFE).
 auth_enabled: false
 
 server:
+  # Port d'écoute HTTP pour l'API et la consultation via Grafana.
   http_listen_port: 3101
+  # Port gRPC pour les communications internes à haute performance entre composants Loki.
   grpc_listen_port: 9095
 
 common:
+  # Adresse d'instance locale (standard pour un déploiement mono-conteneur).
   instance_addr: 127.0.0.1
+  # Dossier racine où Loki va stocker ses données temporaires et persistantes.
   path_prefix: /tmp/loki
   storage:
     filesystem:
+      # Stockage des blocs de logs compressés (les 'chunks').
       chunks_directory: /tmp/loki/chunks
+      # Stockage des règles d'alerte (si définies).
       rules_directory: /tmp/loki/rules
+  
+  # Facteur de réplication : 1 signifie qu'on ne duplique pas les données (idéal pour le dev/local).
   replication_factor: 1
   ring:
     kvstore:
+      # Utilisation de la mémoire vive pour gérer l'état du cluster (plus rapide en local).
       store: inmemory
 
 schema_config:
+  # Définition de la structure de la base de données de logs.
   configs:
     - from: 2020-10-24
+      # TSDB est le format de stockage le plus récent, optimisé pour la vitesse de recherche.
       store: tsdb
+      # On utilise le système de fichiers du conteneur pour stocker les logs (pas de S3/Cloud ici).
       object_store: filesystem
+      # Schéma v13 : la version la plus stable et recommandée par Grafana Labs.
       schema: v13
       index:
+        # Préfixe pour les fichiers d'indexation.
         prefix: index_
+        # Période de rotation des index (24h est le standard).
         period: 24h
 
 analytics:
+  # Désactivation de l'envoi de statistiques d'utilisation anonymes à Grafana Labs.
   reporting_enabled: false

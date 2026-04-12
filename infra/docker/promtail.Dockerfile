@@ -1,19 +1,14 @@
 ARG PROMTAIL_VERSION
 FROM grafana/promtail:${PROMTAIL_VERSION}
 
-# Technical labels
-LABEL component="Log-shipper"
+LABEL component="Log-Collector-Agent"
 LABEL project="SRM-Oriental-Gateway"
 
-# Variable for the custom port
+# On s'assure que Promtail tourne en root pour accéder au socket Docker
+USER root
+
+# Le port interne est passé via ARG pour la flexibilité
 ARG PROMTAIL_INTERNAL_PORT
-
-# Copy the custom configuration file into the container
-COPY infra/promtail/promtail-config.yml /etc/promtail/promtail-config.yaml
-
-# Promtail requires access to host logs.
-# In a highlu secured environment we would use ACLs.
-
 EXPOSE ${PROMTAIL_INTERNAL_PORT}
 
-CMD [ "-config.file=/etc/promtail/promtail-config.yaml" ]
+# Pas besoin de CMD spécifique, on utilise celui de l'image parente

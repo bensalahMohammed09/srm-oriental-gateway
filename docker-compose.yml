@@ -1,19 +1,24 @@
-
+# ==============================================================================
+# SRM ORIENTAL GATEWAY - INFRASTRUCTURE ORCHESTRATION
+# Project: Bureau d'Ordre Digital & OCR Invoice Tracking
+# ==============================================================================
 
 services:
-  # -------- JENKINS --------
+  # ----------------------------------------------------------------------------
+  # CI/CD PIPELINE (Jenkins)
+  # ----------------------------------------------------------------------------
   jenkins-srm:
     build:
       context: .
       dockerfile: infra/docker/jenkins.Dockerfile
     container_name: jenkins-srm
-    user: root
+    user: root # Required to interact with host Docker socket
     ports:
       - "8085:8080"
       - "50000:50000"
     volumes:
       - jenkins-srm_data:/var/jenkins_home
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock # Docker-in-Docker capability
       - ./.env:/tmp/.env.srm
     environment:
       - JAVA_OPTS=-Xmx512m -Xms512m
@@ -24,8 +29,11 @@ services:
     networks:
       - sec-net
       - ops-net
+    restart: unless-stopped
 
-  # 1. API
+  # ----------------------------------------------------------------------------
+  # BACKEND API (.NET)
+  # ----------------------------------------------------------------------------
   srm-api:
     build:
       context: ./src/backend
@@ -37,6 +45,8 @@ services:
     container_name: srm-api
     ports:
       - "${API_EXTERNAL_PORT}:${API_INTERNAL_PORT}"
+    volumes:
+      - srm_uploads:/app/uploads # Shared folder for invoice PDF storage
     deploy:
       resources:
         limits:
@@ -48,7 +58,9 @@ services:
     depends_on:
       - srm-db
 
-  # 2. Dashboard
+  # ----------------------------------------------------------------------------
+  # FRONTEND DASHBOARD (React/Next.js + Nginx)
+  # ----------------------------------------------------------------------------
   srm-dashboard:
     build:
       context: .
@@ -58,6 +70,8 @@ services:
         NGINX_VERSION: ${NGINX_VERSION}
         DASHBOARD_INTERNAL_PORT: ${DASHBOARD_INTERNAL_PORT}
     container_name: srm-dashboard
+    environment:
+      - DASHBOARD_INTERNAL_PORT=${DASHBOARD_INTERNAL_PORT}
     ports:
       - "${DASHBOARD_EXTERNAL_PORT}:${DASHBOARD_INTERNAL_PORT}"
     deploy:
@@ -66,110 +80,133 @@ services:
           memory: 128M
     networks:
       - web-net
+    restart: unless-stopped
 
-  # 3. Worker OCR
+  # ----------------------------------------------------------------------------
+  # WORKER OCR (Python + Tesseract)
+  # ----------------------------------------------------------------------------
   srm-ocr-worker:
+    platform: linux/amd64
     build:
       context: .
       dockerfile: infra/docker/worker.Dockerfile
       args:
-        PYTHON_VERSION: ${PYTHON_VERSION}
-        SRM_USER_ID: ${SRM_USER_ID}
-        SRM_GROUP_ID: ${SRM_GROUP_ID}
-        WORKER_ENV: ${WORKER_ENV}
+        BASE_IMAGE:    ${BASE_IMAGE}
+        SRM_USER_ID:   ${SRM_USER_ID}
+        SRM_GROUP_ID:  ${SRM_GROUP_ID}
+        WORKER_ENV:    ${WORKER_ENV}
     container_name: srm-ocr-worker
+    volumes:
+      - ./src/workers/ocr-service:/home/srm_worker/app  # Live development sync
+      - srm_uploads:/home/srm_worker/app/uploads        # Shared folder to read PDFs
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 1G                                    # OCR is CPU/Memory intensive
     networks:
       - back-net
       - ops-net
     depends_on:
-      - srm-db
-
-  # 4. Database
+      srm-db:
+        condition: service_healthy
+    restart: on-failure
+      
+  # ----------------------------------------------------------------------------
+  # PRIMARY DATABASE (PostgreSQL)
+  # ----------------------------------------------------------------------------
   srm-db:
     build:
       context: .
       dockerfile: infra/docker/db.Dockerfile
       args:
         POSTGRES_VERSION: ${POSTGRES_VERSION}
-        POSTGRES_USER: ${POSTGRES_USER}
-        POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-        POSTGRES_DB: ${POSTGRES_DB}
-        DB_INTERNAL_PORT: ${DB_INTERNAL_PORT}
     container_name: srm-db
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - PGPORT=${DB_INTERNAL_PORT}
     ports:
       - "${DB_EXTERNAL_PORT}:${DB_INTERNAL_PORT}"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck: # Essential for dependent services (API/Worker)
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     deploy:
       resources:
         limits:
           memory: 512M
     networks:
       - back-net
+    restart: unless-stopped
 
-  # 5. n8n
+  # ----------------------------------------------------------------------------
+  # WORKFLOW AUTOMATION (n8n)
+  # ----------------------------------------------------------------------------
   n8n:
-    build:
-      context: .
-      dockerfile: infra/docker/n8n.Dockerfile
-      args:
-        N8N_VERSION: ${N8N_VERSION}
-        N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
-        N8N_INTERNAL_PORT: ${N8N_INTERNAL_PORT}
+    image: n8nio/n8n:latest
     container_name: n8n
+    platform: linux/amd64
+    user: "1000:1000"
     ports:
       - "${N8N_EXTERNAL_PORT}:${N8N_INTERNAL_PORT}"
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-    networks:
-      - back-net
+    environment:
+      - N8N_HOST=${N8N_HOST:-localhost}
+      - N8N_PORT=${N8N_INTERNAL_PORT}
+      - N8N_PROTOCOL=http
+      - NODE_ENV=development
+      - WEBHOOK_URL=http://localhost:${N8N_EXTERNAL_PORT}/
     volumes:
       - n8n_data:/home/node/.n8n
+    networks:
+      - ops-net
+    restart: unless-stopped
 
-  # ---- OBSERVABILITY ----
+  # ----------------------------------------------------------------------------
+  # OBSERVABILITY STACK (Prometheus, Loki, Grafana, Promtail)
+  # ----------------------------------------------------------------------------
   prometheus:
-    build:
-      context: .
-      dockerfile: infra/docker/prometheus.Dockerfile
-      args:
-        PROMETHEUS_VERSION: ${PROMETHEUS_VERSION}
-        PROMETHEUS_INTERNAL_PORT: ${PROMETHEUS_INTERNAL_PORT}
+    image: prom/prometheus:latest
     container_name: prometheus
+    platform: linux/amd64
+    user: root
     ports:
       - "${PROMETHEUS_EXTERNAL_PORT}:${PROMETHEUS_INTERNAL_PORT}"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 512M
     networks:
       - ops-net
-    volumes:
-      - prometheus_data:/prometheus
+    restart: unless-stopped
     
   loki:
-    build:
-      context: .
-      dockerfile: infra/docker/loki.Dockerfile
-      args:
-        LOKI_VERSION: ${LOKI_VERSION}
-        LOKI_INTERNAL_PORT: ${LOKI_INTERNAL_PORT}
+    image: grafana/loki:latest
     container_name: loki
+    platform: linux/amd64
     ports:
       - "${LOKI_EXTERNAL_PORT}:${LOKI_INTERNAL_PORT}"
+    user: "0"
+    volumes:
+      - ./infra/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/tmp/loki
+    command: -config.file=/etc/loki/local-config.yaml
     deploy:
       resources:
         limits:
           memory: 256M
     networks:
       - ops-net
-    volumes:
-      - loki_data:/tmp/loki
+    restart: unless-stopped
 
   grafana:
     build:
@@ -182,14 +219,15 @@ services:
     container_name: grafana
     ports:
       - "${GRAFANA_EXTERNAL_PORT}:${GRAFANA_INTERNAL_PORT}"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning # Auto-config datasources
     deploy:
       resources:
         limits:
           memory: 256M
     networks:
       - ops-net
-    volumes:
-      - grafana_data:/var/lib/grafana
 
   promtail:
     build:
@@ -197,8 +235,11 @@ services:
       dockerfile: infra/docker/promtail.Dockerfile
       args:
         PROMTAIL_VERSION: ${PROMTAIL_VERSION}
+        # On s'assure que le port interne (ex: 9081) est bien transmis
         PROMTAIL_INTERNAL_PORT: ${PROMTAIL_INTERNAL_PORT}
     container_name: promtail
+    # CRUCIAL : root est nécessaire pour lire /var/run/docker.sock
+    user: root 
     deploy:
       resources:
         limits:
@@ -206,8 +247,12 @@ services:
     networks:
       - ops-net
     volumes:
+      # 1. Ta configuration (celle qui contient docker_sd_configs)
+      - ./infra/promtail/promtail-config.yml:/etc/promtail/config.yml
+      # 2. Le socket Docker en lecture seule (:ro) pour la découverte auto
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - /var/log:/var/log:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    restart: unless-stopped
 
   node-exporter:
     build:
@@ -217,16 +262,24 @@ services:
         NODE_EXPORTER_VERSION: ${NODE_EXPORTER_VERSION}
         NODE_EXPORTER_INTERNAL_PORT: ${NODE_EXPORTER_INTERNAL_PORT}
     container_name: node-exporter
+    command:
+      - '--path.rootfs=/host'
+      - '--web.listen-address=:${NODE_EXPORTER_INTERNAL_PORT}'
     ports:
       - "${NODE_EXPORTER_EXTERNAL_PORT}:${NODE_EXPORTER_INTERNAL_PORT}"
     deploy:
       resources:
         limits:
           memory: 64M
+    restart: unless-stopped
+    volumes:
+      - '/:/host:ro'
     networks:
       - ops-net
 
-  # ---- QUALITY ----
+  # ----------------------------------------------------------------------------
+  # CODE QUALITY & SECURITY (SonarQube)
+  # ----------------------------------------------------------------------------
   sonar-db:
     build: 
       context: .
@@ -269,21 +322,29 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 2G # SonarQube requires significant RAM for analysis
     ports:
       - "${SONAR_EXTERNAL_PORT}:${SONAR_INTERNAL_PORT}"
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
     networks:
       - sec-net
     depends_on:
       - sonar-db
 
-# Networks & Volumes
+# ==============================================================================
+# NETWORKS DEFINITION
+# ==============================================================================
 networks:
-  web-net:
-  back-net:
-  ops-net:
-  sec-net:
+  web-net:  # Public facing traffic
+  back-net: # Internal app communication (API <-> DB)
+  ops-net:  # Monitoring & CI/CD traffic
+  sec-net:  # Security scanning traffic (SonarQube)
 
+# ==============================================================================
+# VOLUMES DEFINITION (Persistent Data)
+# ==============================================================================
 volumes:
   jenkins-srm_data:
   postgres_data:
@@ -292,3 +353,6 @@ volumes:
   loki_data:
   grafana_data:
   sonar_db_data:
+  sonarqube_data:
+  sonarqube_extensions:
+  srm_uploads: # Essential for cross-service PDF handling

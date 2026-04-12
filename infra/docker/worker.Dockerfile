@@ -1,52 +1,65 @@
-# Using a slim version of Python for a smaller footprint [cite: 18]
-ARG PYTHON_VERSION
-FROM python:${PYTHON_VERSION}
+# --- BUILD ARGUMENTS ---
+ARG BASE_IMAGE=python:3.11-slim-bookworm
+FROM ${BASE_IMAGE}
 
-# Technical labels
+# --- LABELS ---
 LABEL component="OCR-Worker"
 LABEL project="SRM-Oriental-Gateway"
 
-# Install system dependencies for OCR and PDF processing [cite: 18]
+# --- BUILD-TIME ARGS (declared before USER for clarity) ---
+ARG SRM_USER_ID=1000
+ARG SRM_GROUP_ID=1000
+ARG WORKER_ENV
+
+# --- PYTHON CONFIGURATION ---
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    WORKER_ENV=${WORKER_ENV}
+
+# --- SYSTEM DEPENDENCIES ---
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-fra \
     poppler-utils \
+    libgl1 \
+    libglib2.0-0 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Variables for the non-root user [cite: 18]
-ARG SRM_USER_ID
-ARG SRM_GROUP_ID
+# --- SET TESSDATA_PREFIX DYNAMICALLY ---
+RUN TESS_MAJOR=$(tesseract --version 2>&1 | awk 'NR==1{print $2}' | cut -d. -f1) && \
+    echo "TESSDATA_PREFIX=/usr/share/tesseract-ocr/${TESS_MAJOR}/tessdata" >> /etc/environment
+ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata
 
-# Create a non-root user and group to run the application securely [cite: 18]
+# --- USER SETUP ---
 RUN groupadd -g ${SRM_GROUP_ID} srmgroup && \
     useradd -u ${SRM_USER_ID} -g srmgroup -m -s /bin/bash srm_worker
 
-# Set the working directory inside the user's home folder [cite: 18]
+# --- VIRTUALENV (avoids running app-owned packages as root) ---
+RUN python -m venv /home/srm_worker/venv
+ENV PATH="/home/srm_worker/venv/bin:$PATH"
+
 WORKDIR /home/srm_worker/app
 
-# Set ownership of the directory before switching users [cite: 19]
-RUN chown -R srm_worker:srmgroup /home/srm_worker
-
-# Switch to the non-root user
-USER srm_worker
-
-# 1. Copy requirements first to optimize build cache [cite: 18]
+# --- PYTHON DEPENDENCIES (leverage layer cache) ---
 COPY --chown=srm_worker:srmgroup src/workers/ocr-service/requirements.txt .
 
-# 2. Install Python dependencies
-# Using --user to install in the non-root user's local directory
-RUN pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-# 3. Copy the actual application source code (Crucial fix)
+# --- APPLICATION CODE ---
 COPY --chown=srm_worker:srmgroup src/workers/ocr-service/ .
 
-# Ensure the local bin is in PATH for pip installed scripts [cite: 20]
-ENV PATH="/home/srm_worker/.local/bin:${PATH}"
+# --- CRLF FIX & PERMISSIONS ---
+RUN find . -type f -name "*.py" -exec sed -i 's/\r$//' {} + && \
+    chown -R srm_worker:srmgroup /home/srm_worker/app
 
-# Context variable 
-ARG WORKER_ENV
-ENV WORKER_ENV=${WORKER_ENV}
+# --- SWITCH TO NON-ROOT USER ---
+USER srm_worker
 
-# Start the worker [cite: 18]
+# --- HEALTHCHECK ---
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import os, sys; sys.exit(0 if os.path.exists('main.py') else 1)"
+
+# --- ENTRYPOINT ---
 CMD ["python", "main.py"]

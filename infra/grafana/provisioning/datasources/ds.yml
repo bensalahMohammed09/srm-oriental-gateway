@@ -1,13 +1,31 @@
+# --- CONFIGURATION DU PROVISIONING GRAFANA ---
+# Ce fichier automatise l'ajout des "Data Sources" (sources de données).
+
 apiVersion: 1
 
 datasources:
+  # 1. Configuration de la source Prometheus (Métriques)
   - name: Prometheus
+    # Type de base de données (Time Series)
     type: prometheus
-    url: http://prometheus:9091
+    # Mode 'proxy' : Grafana effectue les requêtes via son backend vers le réseau Docker.
     access: proxy
+    # URL interne au réseau Docker. Notez le port 9091 (ou 9090 selon votre config).
+    url: http://prometheus:9090
+    # Définit Prometheus comme la source sélectionnée par défaut dans Grafana.
     isDefault: true
+    # Autorise la modification de la source via l'interface web si nécessaire.
+    editable: true
 
+  # 2. Configuration de la source Loki (Logs)
   - name: Loki
+    # Type de source pour la centralisation des logs.
     type: loki
-    url: http://loki:3101
     access: proxy
+    # URL interne pointant vers le conteneur Loki sur le port 3101.
+    url: http://loki:3101
+    editable: true
+
+  # --- ZONE D'EXTENSION FUTURE ---
+  # Vous pourriez ajouter ici une source 'Alertmanager' ou 'Tempo' (Traces)
+  # si vous étendez votre stack d'observabilité plus tard.
