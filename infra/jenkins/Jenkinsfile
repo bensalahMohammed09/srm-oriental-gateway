@@ -16,6 +16,9 @@ pipeline{
                         script{
                             sh "git config --global --add safe.directory '*'"
                             deleteDir() // Nettoie le workspace pour éviter les conflits de fichiers 
+
+                            // 1. Fresh Checkout
+                            checkout scm
                             
                         }
                 }
@@ -24,13 +27,10 @@ pipeline{
         stage('Step 1.1: Path Detection & Workspace Preparation'){
             steps{
                 script{
-                    // 1. Fresh Checkout
-                    checkout scm
-
-                    // 2. Change Detection Logic
+                    // 1. Change Detection Logic
                     // Compare the current commit against the last successfull one 
                     def lastSuccess = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: "HEAD~1"
-                    def changedFiles = sh(script: "git diff --name-only ${lastSuccess} ${env.GIT_COMMIT}",returnStdout: true)
+                    def changedFiles = sh(script: "git diff --name-only ${lastSuccess} ${env.GIT_COMMIT}",returnStdout: true).trim().tokenize('\n')
 
                     echo "Checking changes between ${lastSuccess} and current commit..."
                     for (file in changedFiles){
