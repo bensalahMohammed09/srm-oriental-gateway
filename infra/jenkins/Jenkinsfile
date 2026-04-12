@@ -3,10 +3,10 @@ pipeline{
 
     // Global flags for the pipeline orchestration
     environment{
-        BUILD_BACKEND = "false"
-        BUILD_FRONTEND = "false"
-        BUILD_WORKERS = "false"
-        FORCE_ALL = "false"
+        env.BUILD_BACKEND = "false"
+        env.BUILD_FRONTEND = "false"
+        env.BUILD_WORKERS = "false"
+        env.FORCE_ALL = "false"
     }
 
     stages{
