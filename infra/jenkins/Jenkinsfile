@@ -19,7 +19,7 @@ pipeline{
         stage('Step 1.1: Path Detection & Workspace Preparation'){
             steps{
                 script{
-                    
+
                     // 0. Initialize variables in the global env object
                     env.BUILD_BACKEND = "false"
                     env.BUILD_FRONTEND = "false"
@@ -86,7 +86,7 @@ pipeline{
 
                     // Execution of Deep Analysis
                     withCredentials([string(credentialsId: 'sonarqube-token',variable: 'SONAR_AUTH_TOKEN')]) {
-                        withSonarQubeEnv('SonarQube'){
+                        withSonarQubeEnv('sonarqube'){
                             sh """
                                 dotnet sonarscanner begin /k:"srm-backend" \
                                 /d:sonar.login="${SONAR_AUTH_TOKEN}" \
