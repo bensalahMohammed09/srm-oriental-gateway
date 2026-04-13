@@ -50,9 +50,6 @@ pipeline{
                         // Global Trigger: Changes in core infra or jenkins config force a full system rebuild
                         if(file.startsWith('infra/') || file.endsWith('Jenkinsfile') || file.endsWith('docker-compose.yml')){
                             echo "CRITICAL: Global configuration change detected (${file}) forcing Full Rebuild."
-                            env.BUILD_BACKEND = "true"
-                            env.BUILD_FRONTEND = "true"
-                            env.BUILD_WORKERS = "true"
                             env.FORCE_ALL = "true"
                             break
                         }
@@ -168,6 +165,21 @@ pipeline{
                     sh "trivy fs --severity HIGH,CRITICAL --exit-code 1 ."
                 }
             }
+        }
+    }
+    post{
+        always{
+            script{
+                echo "Finalizing pipeline execution...."
+                deleteDir()
+                echo "Workspace cleaned!"
+            }
+        }
+        success{
+            echo "Deployment Pipeline: SUCCESS"
+        }
+        failure{
+            echo "Deployment Pipeline: FAILED. Check logs...."
         }
     }
 }

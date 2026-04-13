@@ -30,3 +30,10 @@ RUN apt-get update && apt-get install -y \
 # 3. Install SonarScanner as a global tool
 RUN dotnet tool install --global dotnet-sonarscanner
 ENV PATH="$PATH:/root/.dotnet/tools"
+
+# Install dependencies, add the Trivy GPG key, and set up the repository
+RUN apt-get update && apt-get install -y wget apt-transport-https gnupg lsb-release \
+    && wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor -o /usr/share/keyrings/trivy.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" | tee /etc/apt/sources.list.d/trivy.list \
+    && apt-get update \
+    && apt-get install -y trivy
