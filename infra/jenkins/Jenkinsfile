@@ -1,185 +1,194 @@
-pipeline{
+def getServiceMap() {
+    return [
+        'infra/docker/api.Dockerfile' : 'srm-api',
+        'infra/docker/db.Dockerfile' : 'srm-db',
+        'infra/docker/dashboard.Dockerfile' : 'srm-dashboard',
+        'infra/docker/worker.Dockerfile' : 'srm-ocr-worker',
+        'infra/docker/promtail.Dockerfile' : 'promtail',
+        'infra/docker/node-exporter.Dockerfile' : 'node-exporter',
+        'infra/docker/sonar-db.Dockerfile' : 'sonar-db',
+        'infra/docker/sonarqube.Dockerfile' : 'sonarqube',
+        'infra/docker/grafana.Dockerfile' : 'grafana',
+        'infra/docker/jenkins.Dockerfile' : 'jenkins-srm'
+    ]
+}
+
+pipeline {
     agent any
 
-    stages{
-        stage('Step 0: Prep Environment & Secret Injection'){
-                steps{
-                    script{
-                        script{
-                            sh "git config --global --add safe.directory '*'"
-                            deleteDir() // Nettoie le workspace pour éviter les conflits de fichiers 
-
-                            // 1. Fresh Checkout
-                            checkout scm
-
-                            //Define the source and destination
-                            def sharedPath = "/tmp/.env.srm"
-                            def localPath = "./env"
-
-                            echo "Checking for environment secrets at ${sharedPath}...."
-                            if(fileExists(sharedPath)) {
-                                sh "cp ${sharedPath} ${localPath}"
-                                echo "SUCCESS: .env file injected into workspace."
-                            }else{
-                                error "STOP: Required .env file NOT FOUND at ${sharedPath}. Please mount the volume correctly!"
-                            }
-                            
-                        }
-                }
-            }
-        }
-        stage('Step 1.1: Path Detection & Workspace Preparation'){
-            steps{
-                script{
-
-                    // 0. Initialize variables in the global env object
-                    env.BUILD_BACKEND = "false"
-                    env.BUILD_FRONTEND = "false"
-                    env.BUILD_WORKERS = "false"
-                    env.FORCE_ALL = "false"
-
-                    // 1. Change Detection Logic
-                    // Compare the current commit against the last successfull one 
-                    def lastSuccess = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: "HEAD~1"
-                    def changedFiles = sh(script: "git diff --name-only ${lastSuccess} ${env.GIT_COMMIT}",returnStdout: true).trim().tokenize('\n')
-
-                    echo "Checking changes between ${lastSuccess} and current commit..."
-                    for (file in changedFiles){
-                        echo "Detected change in: ${file}"
-
-                        // Global Trigger: Changes in core infra or jenkins config force a full system rebuild
-                        if(file.startsWith('infra/') || file.endsWith('Jenkinsfile') || file.endsWith('docker-compose.yml')){
-                            echo "CRITICAL: Global configuration change detected (${file}) forcing Full Rebuild."
-                            env.FORCE_ALL = "true"
-                            break
-                        }
-
-                        //Component-specific check
-                        if(file.startsWith('src/backend/')){
-                            env.BUILD_BACKEND = "true"
-                        }
-                        if(file.startsWith('src/frontend/')){
-                            env.BUILD_FRONTEND = "true"
-                        }
-                        if(file.startsWith('src/workers/')){
-                            env.BUILD_WORKERS = "true"
-                        }
-                    }
-                }
-            }
-        }
-
-        stage('Step 1.1: Verification'){
-            steps{
-                echo "--- Final Build Decisions ---"
-                echo "Run Backend Pipeline: ${env.BUILD_BACKEND}"
-                echo "Run Frontend Pipeline: ${env.BUILD_FRONTEND}"
-                echo "Run Workers Pipeline: ${env.BUILD_WORKERS}"
-                echo "Force Full Rebuild: ${env.FORCE_ALL}"
-            }
-        }
-
-        stage('Step 1.2: Backend Analysis & Quality Gate'){
-            when{
-                expression { env.BUILD_BACKEND == "true"}
-            }
-            steps{
-                script{
-                    echo "Orchestrating Quality Services (SonarQube) ...."
-
-                    // Dynamic Service Startup
-                    sh "docker start sonar-db sonarqube"
-
-                    echo "Waiting for SonarQube to wake up...."
-                    sh 'timeout 120s bash -c "until curl -s http://sonarqube:9002/api/system/status | grep -q UP; do sleep 5; done"'
-
-                    // Execution of Deep Analysis
-                    withCredentials([string(credentialsId: 'sonarqube-token',variable: 'SONAR_AUTH_TOKEN')]) {
-                        withSonarQubeEnv('sonarqube'){
-                            sh """
-                                dotnet sonarscanner begin /k:"srm-backend" \
-                                /d:sonar.login="${SONAR_AUTH_TOKEN}" \
-                                /d:sonar.host.url="http://sonarqube:9002" \
-                                /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml"
-
-                                dotnet build src/backend/Srm.Gateway.sln --configuration Release
-
-                                dotnet sonarscanner end /d:sonar.login="${SONAR_AUTH_TOKEN}"
-                            """
-
-                        }
-                    }
-
-                    // CRITICAL: This part forces Jenkins to wait for SonarQube's status
-                    //If the Quality Gate fails, the pipeline will stop here with an error
-                    timeout(time: 5,unit: 'MINUTES'){
-                        def qg = waitForQualityGate()
-                        if(qg.status != 'OK'){
-                            error "Pipeline aborted due to quality gate failure: ${qg.status}"
-                        }
-                    }
-
-                    // Stopping the services to free System resources
-                    echo "Analysis successful. Stopping services...."
-                    sh "docker stop sonar-db sonarqube"
-                }
-            }
-        }
-
-        stage('Step 1.2: Frontend Security (NPM Audit)'){
-            when{
-                expression { env.BUILD_FRONTEND == true}
-            }
-            steps{
-                script{
-                    echo "Checking Frontend dependencies for vulnerabilities...."
-                    dir('src/frontend'){
-                        // Fail the build if High or Critical vulnerabilities are found
-                        sh "npm audit --audit-level=high"
-                    }
-                }
-            }
-        }
-
-        stage('Step 1.2: Worker Security Scan (Python)'){
-            when{
-                expression { env.BUILD_WORKER == true}
-            }
-            steps{
-                script{
-                    echo "Scanning Pythong Worker for security vulnerabilities...."
-                    dir('src/workers/ocr-service'){
-                        // Static security analysis for python code
-                        sh "pip install bandit safety"
-                        sh "bandit -r . -ll"
-                        sh "safety check"
-                    }
-                }
-            }
-        }
-
-        stage('Step 1.2: Global Secret Scan (Trivy)'){
-            steps{
-                script{
-                    echo "Final check fo hardcoded secrets across the repository..."
-                    sh "trivy fs --severity HIGH,CRITICAL --exit-code 1 ."
-                }
-            }
-        }
+    environment {
+       RUN_SONAR_BACKEND = "false"
+       RUN_SCAN_FRONTEND = "false"
+       RUN_SCAN_WORKER = "false"
+       FORCE_ALL = "false"
+       GIT_SHA = ""
     }
-    post{
-        always{
-            script{
-                echo "Finalizing pipeline execution...."
-                deleteDir()
-                echo "Workspace cleaned!"
+
+    stages {
+        stage('0. Preparation') {
+            steps {
+                script {
+                    echo "Cleaning workspace and fixing Git permissions..."
+                    deleteDir()
+                    checkout scm
+                    sh "git config --global --add safe.directory '*'"
+
+                    // Secure Secret Injection using Jenkins Credentials plugin
+                    // Ensure you have a 'Secret file' credential named 'srm-env-file' in Jenkins
+                    withCredentials([file(credentialsId: 'srm-env-file', variable: 'SECRET_ENV')]) {
+                        sh "cp \$SECRET_ENV ./.env"
+                        echo "SUCCESS: .env file injected into workspace."
+                    }
+
+                    env.GIT_SHA = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+                    echo "Current Git SHA: ${env.GIT_SHA}"
+                }
             }
         }
-        success{
-            echo "Deployment Pipeline: SUCCESS"
+
+        stage('1. Intelligent Path Detection') {
+            steps {
+                script {
+                    def lastSuccess = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: "HEAD~1"
+                    // Added fallback echo to prevent crash on first run
+                    def changedFiles = sh(script: "git diff --name-only ${lastSuccess} ${env.GIT_COMMIT} || echo ''", returnStdout: true).trim().tokenize("\n")
+                    
+                    for (file in changedFiles) {
+                        echo "Analyzing: ${file}"
+
+                        if (file == 'docker-compose.yml' || file == ".env.example") {
+                            env.FORCE_ALL = "true"
+                            echo "Critical file changed: ${file}. Setting FORCE_ALL to true."
+                        }
+
+                        if (file.startsWith('src/backend/')) { env.RUN_SONAR_BACKEND = "true" }
+                        if (file.startsWith('src/frontend/')) { env.RUN_SCAN_FRONTEND = "true" }
+                        if (file.startsWith('src/workers/')) { env.RUN_SCAN_WORKER = "true" }
+                    }
+                }
+            }
         }
-        failure{
-            echo "Deployment Pipeline: FAILED. Check logs...."
+
+        stage('2. Verification') {
+            steps {
+                echo "--- Decision Matrix ---"
+                echo "Analyze Backend(SonarQube): ${env.RUN_SONAR_BACKEND}"
+                echo "Analyze Frontend(NPM): ${env.RUN_SCAN_FRONTEND}"
+                echo "Analyze Worker(Bandit): ${env.RUN_SCAN_WORKER}"
+                echo "Force All: ${env.FORCE_ALL}"
+            }
+        }
+
+        stage('3. Backend Analysis with SonarQube') {
+            when { 
+                expression { env.RUN_SONAR_BACKEND == "true" || env.FORCE_ALL == "true" } 
+            }
+            steps {
+                script {
+                    try {
+                        sh "docker start sonar-db sonarqube"
+                        sh 'timeout 123s bash -c "until curl -s http://sonarqube:9002/api/system/status | grep -q UP; do sleep 5; done"'
+
+                        echo "Running SonarQube analysis for Backend..."
+                        withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
+                            withSonarQubeEnv('sonarqube') {
+                                sh """
+                                    dotnet sonarscanner begin /k:"srm-backend" \
+                                    /d:sonar.login="${SONAR_TOKEN}" \
+                                    /d:sonar.host.url=http://sonarqube:9002
+
+                                    dotnet build src/backend/Srm.Gateway.sln --configuration Release
+                                    dotnet sonarscanner end /d:sonar.login="${SONAR_TOKEN}"
+                                """
+                            }
+                        }
+
+                        timeout(time: 5, unit: 'MINUTES') {
+                            def qg = waitForQualityGate()
+                            if (qg.status != 'OK') {
+                                error "SonarQube Quality Gate failed: ${qg.status}"
+                            }
+                        }
+                    } finally {
+                        // Ensures services are stopped even if the analysis or build fails
+                        sh "docker stop sonar-db sonarqube || true"
+                    }
+                }
+            }
+        }
+
+        stage('4. Frontend & Worker Scan') {
+            parallel {
+                stage('Frontend - NPM Audit') {
+                    when {
+                        expression { env.RUN_SCAN_FRONTEND == "true" || env.FORCE_ALL == "true" }
+                    }
+                    steps {
+                        dir('src/frontend') {
+                            echo "Running NPM Audit for Frontend..."
+                            sh "npm audit --audit-level=high"
+                        }
+                    }
+                }
+                stage('Worker - Bandit Scan') {
+                    when {
+                        expression { env.RUN_SCAN_WORKER == "true" || env.FORCE_ALL == "true" }
+                    }
+                    steps {
+                        dir('src/workers/ocr-service') {
+                            echo "Running Bandit Scan for Worker..."
+                            sh "pip install bandit"
+                            sh "bandit -r . -ll -ii"
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('5. Mandatory Full Scan') {
+            when {
+                expression { env.FORCE_ALL == "true" }
+            }
+            steps {
+                echo "Running full scans for all components due to critical changes..."
+                sh "trivy fs --severity HIGH,CRITICAL --exit-code 1 ."
+            }
+        }
+
+        stage('6. Custom Containers build') {
+            steps {
+                script {
+                    def services = getServiceMap()
+                    def lastSuccess = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: "HEAD~1"
+                    def changedFiles = sh(script: "git diff --name-only ${lastSuccess} ${env.GIT_COMMIT} || echo ''", returnStdout: true).trim().tokenize("\n")
+
+                    services.each { infraPath, imageName ->
+                        if (imageName == 'jenkins-srm') return // Skip Jenkins image to avoid self-rebuild
+
+                        def infraChanged = changedFiles.any { it == infraPath }
+
+                        if (infraChanged || env.FORCE_ALL == "true") {
+                            echo "Building image: ${imageName}"
+                            // Updated build command to target specific Dockerfiles from the map
+                            sh "docker build -t ${imageName}:${env.GIT_SHA} -f ${infraPath} ."
+                        } else {
+                            echo "SKIP: No changes detected. Skipping build for image: ${imageName}"
+                        }
+                    } 
+                }
+            }
+        }
+
+        stage('7. Orchestrated Compose') {
+            steps {
+                script {
+                    echo "Starting Docker Compose with updated images..."
+                    sh "docker-compose up -d \$(docker-compose config --services | grep -v 'jenkins-srm')"
+
+                    echo "Infrastructure updated. Cleaning up dangling images..."
+                    sh "docker image prune -f"
+                }
+            }
         }
     }
 }
