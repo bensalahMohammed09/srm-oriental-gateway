@@ -185,7 +185,7 @@ pipeline {
             steps {
                 script {
                     echo "Starting Docker Compose with updated images..."
-                    sh "docker-compose up -d \$(docker-compose config --services | grep -v 'jenkins-srm')"
+                    sh "docker compose up -d \$(docker-compose config --services | grep -v 'jenkins-srm')"
 
                     echo "Infrastructure updated. Cleaning up dangling images..."
                     sh "docker image prune -f"
