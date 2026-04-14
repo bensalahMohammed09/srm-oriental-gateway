@@ -2,7 +2,7 @@
 # SRM ORIENTAL GATEWAY - INFRASTRUCTURE ORCHESTRATION
 # Project: Bureau d'Ordre Digital & OCR Invoice Tracking
 # ==============================================================================
-
+name: srm-oriental-gateway
 services:
   # ----------------------------------------------------------------------------
   # CI/CD PIPELINE (Jenkins)

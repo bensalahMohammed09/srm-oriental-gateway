@@ -22,6 +22,7 @@ pipeline {
        RUN_SCAN_WORKER = "false"
        FORCE_ALL = "false"
        GIT_SHA = ""
+       CHANGED_FILES =  ""
     }
 
     stages {
@@ -30,9 +31,7 @@ pipeline {
                 script {
                     echo "Cleaning workspace and fixing Git permissions..."
                     deleteDir()
-            
                     sh "git config --global --add safe.directory '*'"
-
                     checkout scm
 
                     // Secure Secret Injection using Jenkins Credentials plugin
@@ -41,7 +40,6 @@ pipeline {
                         sh "cp \$SECRET_ENV ./.env"
                         echo "SUCCESS: .env file injected into workspace."
                     }
-
                     env.GIT_SHA = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
                     echo "Current Git SHA: ${env.GIT_SHA}"
                 }
@@ -51,10 +49,11 @@ pipeline {
         stage('1. Intelligent Path Detection') {
             steps {
                 script {
+
                     def lastSuccess = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: "HEAD~1"
-                    // Added fallback echo to prevent crash on first run
-                    def changedFiles = sh(script: "git diff --name-only ${lastSuccess} ${env.GIT_COMMIT} || echo ''", returnStdout: true).trim().tokenize("\n")
-                    
+                    env.CHANGED_FILES = sh(script: "git diff --name-only ${lastSuccess} ${env.GIT_COMMIT} || echo ''", returnStdout: true).trim()
+                    def changedFiles = env.CHANGED_FILES.tokenize('\n')
+
                     for (file in changedFiles) {
                         echo "Analyzing: ${file}"
 
@@ -89,7 +88,7 @@ pipeline {
                 script {
                     try {
                         sh "docker start sonar-db sonarqube"
-                        sh 'timeout 123s bash -c "until curl -s http://sonarqube:9002/api/system/status | grep -q UP; do sleep 5; done"'
+                        sh 'timeout 120s bash -c "until curl -s http://sonarqube:9002/api/system/status | grep -q UP; do sleep 5; done"'
 
                         echo "Running SonarQube analysis for Backend..."
                         withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
@@ -139,7 +138,6 @@ pipeline {
                     steps {
                         dir('src/workers/ocr-service') {
                             echo "Running Bandit Scan for Worker..."
-                            sh "pip install bandit"
                             sh "bandit -r . -ll -ii"
                         }
                     }
@@ -161,9 +159,7 @@ pipeline {
             steps {
                 script {
                     def services = getServiceMap()
-                    def lastSuccess = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: "HEAD~1"
-                    def changedFiles = sh(script: "git diff --name-only ${lastSuccess} ${env.GIT_COMMIT} || echo ''", returnStdout: true).trim().tokenize("\n")
-
+                    def changedFiles = env.CHANGED_FILES.tokenize('\n')
                     services.each { infraPath, imageName ->
                         if (imageName == 'jenkins-srm') return // Skip Jenkins image to avoid self-rebuild
 
@@ -185,12 +181,24 @@ pipeline {
             steps {
                 script {
                     echo "Starting Docker Compose with updated images..."
-                    sh "docker compose up -d \$(docker-compose config --services | grep -v 'jenkins-srm')"
+                    sh "docker compose up -d --remove-orphans \$(docker compose config --services | grep -vE 'jenkins-srm|sonarqube|sonar-db)"
 
                     echo "Infrastructure updated. Cleaning up dangling images..."
                     sh "docker image prune -f"
                 }
             }
+        }
+    }
+
+    post{
+        always{
+            deleteDir()
+        }
+        success{
+            echo "SUCCESS: Pipeline finished."
+        }
+        failure{
+            echo "FAILED: Pipeline failed. Check the logs!"
         }
     }
 }

@@ -37,3 +37,11 @@ RUN apt-get update && apt-get install -y wget apt-transport-https gnupg lsb-rele
     && echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" | tee /etc/apt/sources.list.d/trivy.list \
     && apt-get update \
     && apt-get install -y trivy
+
+RUN apt-get update && apt-get install -y \
+        python3 \
+        python3-pip \
+        python3-venv \
+        && rm -rf /var/lib/apt/list/*
+
+RUN pip3 install bandit --break-system-packages
