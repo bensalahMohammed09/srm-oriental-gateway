@@ -187,6 +187,7 @@ pipeline {
         stage('7. Orchestrated Compose') {
             steps {
                 script {
+                    sh "ls -F infra/loki/loki-config.yml"
                     echo "Starting Docker Compose with updated images..."
                     sh "docker compose up -d --remove-orphans \$(docker compose config --services | grep -vE 'jenkins-srm|sonarqube|sonar-db')"
 
