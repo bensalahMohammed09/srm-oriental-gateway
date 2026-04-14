@@ -42,7 +42,7 @@ pipeline {
                         sh "cp \$SECRET_ENV ./.env"
                         echo "SUCCESS: .env file injected into workspace."
                     }
-                    env.GIT_SHA = env.GIT_COMMIT.take(7)
+                    env.GIT_SHA = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
                     echo "Current Git SHA: ${env.GIT_SHA}"
                 }
             }
@@ -159,30 +159,36 @@ pipeline {
 
         stage('6. Custom Containers build') {
             steps {
-                script {
+               script {
                     def services = getServiceMap()
                     services.each { infraPath, imageName ->
-                        if (imageName == 'jenkins-srm') return // Skip Jenkins image to avoid self-rebuild
+                    if (imageName == 'jenkins-srm') return 
 
-                        def infraChanged = changedFiles.any { it == infraPath }
+                    // 1. Base : on build si le Dockerfile a changé ou si on force tout
+                    def shouldBuild = (changedFiles.any { it == infraPath } || env.FORCE_ALL == "true")
 
-                        if (infraChanged || env.FORCE_ALL == "true") {
-                            echo "Building image: ${imageName}"
-                            // Updated build command to target specific Dockerfiles from the map
-                            sh "docker build -t ${imageName}:${env.GIT_SHA} -f ${infraPath} ."
-                        } else {
-                            echo "SKIP: No changes detected. Skipping build for image: ${imageName}"
-                        }
+                    // 2. On lie le code source aux images spécifiques
+                    if (imageName == 'srm-api' && env.RUN_SONAR_BACKEND == "true") { shouldBuild = true }
+                    if (imageName == 'srm-dashboard' && env.RUN_SCAN_FRONTEND == "true") { shouldBuild = true }
+                    if (imageName == 'srm-ocr-worker' && env.RUN_SCAN_WORKER == "true") { shouldBuild = true }
+ 
+                    // 3. Exécution du build si une des conditions est vraie
+                    if (shouldBuild) {
+                        echo "BUILDING: ${imageName} (SHA: ${env.GIT_SHA})"
+                        sh "docker build -t ${imageName}:${env.GIT_SHA} -f ${infraPath} ."
+                    } else {
+                        echo "SKIP: No changes for ${imageName}"
                     } 
-                }
+                } 
             }
         }
+    }
 
         stage('7. Orchestrated Compose') {
             steps {
                 script {
                     echo "Starting Docker Compose with updated images..."
-                    sh "docker compose up -d --remove-orphans \$(docker compose config --services | grep -vE 'jenkins-srm|sonarqube|sonar-db)"
+                    sh "docker compose up -d --remove-orphans \$(docker compose config --services | grep -vE 'jenkins-srm|sonarqube|sonar-db')"
 
                     echo "Infrastructure updated. Cleaning up dangling images..."
                     sh "docker image prune -f"
