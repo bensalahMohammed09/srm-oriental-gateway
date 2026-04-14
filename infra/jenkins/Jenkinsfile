@@ -13,6 +13,8 @@ def getServiceMap() {
     ]
 }
 
+def changedFiles = []
+
 pipeline {
     agent any
 
@@ -40,7 +42,7 @@ pipeline {
                         sh "cp \$SECRET_ENV ./.env"
                         echo "SUCCESS: .env file injected into workspace."
                     }
-                    env.GIT_SHA = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+                    env.GIT_SHA = env.GIT_COMMIT.take(7)
                     echo "Current Git SHA: ${env.GIT_SHA}"
                 }
             }
@@ -51,8 +53,8 @@ pipeline {
                 script {
 
                     def lastSuccess = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: "HEAD~1"
-                    env.CHANGED_FILES = sh(script: "git diff --name-only ${lastSuccess} ${env.GIT_COMMIT} || echo ''", returnStdout: true).trim()
-                    def changedFiles = env.CHANGED_FILES.tokenize('\n')
+                    def rawDiff = sh(script: "git diff --name-only ${lastSuccess} ${env.GIT_COMMIT} || echo ''", returnStdout: true).trim()
+                    changedFiles = rawDiff.tokenize('\n')
 
                     for (file in changedFiles) {
                         echo "Analyzing: ${file}"
@@ -159,7 +161,6 @@ pipeline {
             steps {
                 script {
                     def services = getServiceMap()
-                    def changedFiles = env.CHANGED_FILES.tokenize('\n')
                     services.each { infraPath, imageName ->
                         if (imageName == 'jenkins-srm') return // Skip Jenkins image to avoid self-rebuild
 
