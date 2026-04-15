@@ -205,10 +205,10 @@ pipeline {
         stage('7. Orchestrated Compose') {
             steps {
                 script {
-                    echo "Nettoyage et préparation des volumes..."
+                   echo "Injection des configurations par flux (Direct Pipe)..."
                     def projectPrefix = "srm-oriental-gateway"
                     
-                    // On force la suppression et la recréation pour être SÛR qu'il n'y a pas de vieux dossiers
+                    // 1. On s'assure que les volumes sont propres
                     sh "docker volume rm ${projectPrefix}_loki_config || true"
                     sh "docker volume rm ${projectPrefix}_prometheus_config || true"
                     sh "docker volume rm ${projectPrefix}_promtail_config || true"
@@ -217,25 +217,13 @@ pipeline {
                     sh "docker volume create ${projectPrefix}_prometheus_config"
                     sh "docker volume create ${projectPrefix}_promtail_config"
                     
-                    echo "Injection des fichiers..."
-                    sh """
-                        docker run --rm \
-                        -v \$(pwd)/infra/loki:/loki_src \
-                        -v \$(pwd)/infra/prometheus:/prom_src \
-                        -v \$(pwd)/infra/promtail:/promtail_src \
-                        -v ${projectPrefix}_loki_config:/loki_dest \
-                        -v ${projectPrefix}_prometheus_config:/prom_dest \
-                        -v ${projectPrefix}_promtail_config:/promtail_dest \
-                        alpine sh -c "
-                            # On s'assure que les destinations ne sont pas des dossiers avant de copier
-                            rm -rf /loki_dest/* /prom_dest/* /promtail_dest/*
-                            cp /loki_src/loki-config.yml /loki_dest/local-config.yaml
-                            cp /prom_src/prometheus.yml /prom_dest/prometheus.yml
-                            cp /promtail_src/promtail-config.yml /promtail_dest/config.yml
-                        "
-                    """
+                    // 2. On utilise 'cat' pour lire le fichier et on le redirige dans le volume
+                    // Cette méthode ne dépend PAS des chemins de l'hôte (Windows)
+                    sh "cat infra/loki/loki-config.yml | docker run --rm -i -v ${projectPrefix}_loki_config:/dest alpine sh -c 'cat > /dest/local-config.yaml'"
+                    sh "cat infra/prometheus/prometheus.yml | docker run --rm -i -v ${projectPrefix}_prometheus_config:/dest alpine sh -c 'cat > /dest/prometheus.yml'"
+                    sh "cat infra/promtail/promtail-config.yml | docker run --rm -i -v ${projectPrefix}_promtail_config:/dest alpine sh -c 'cat > /dest/config.yml'"
 
-                    echo "Démarrage final..."
+                    echo "Démarrage de la stack..."
                     sh "docker compose up -d --remove-orphans --force-recreate \$(docker compose config --services | grep -vE 'jenkins-srm|sonarqube|sonar-db')"
                 }
             }
