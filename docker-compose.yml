@@ -175,7 +175,7 @@ services:
     ports:
       - "${PROMETHEUS_EXTERNAL_PORT}:${PROMETHEUS_INTERNAL_PORT}"
     volumes:
-      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_config:/etc/prometheus
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -196,7 +196,7 @@ services:
       - "${LOKI_EXTERNAL_PORT}:${LOKI_INTERNAL_PORT}"
     user: "0"
     volumes:
-      - ./infra/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki_config:/etc/loki
       - loki_data:/tmp/loki
     command: -config.file=/etc/loki/local-config.yaml
     deploy:
@@ -247,7 +247,7 @@ services:
       - ops-net
     volumes:
       # 1. Ta configuration (celle qui contient docker_sd_configs)
-      - ./infra/promtail/promtail-config.yml:/etc/promtail/config.yml
+      - promtail_config:/etc/promtail
       # 2. Le socket Docker en lecture seule (:ro) pour la découverte auto
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /var/log:/var/log:ro
@@ -355,3 +355,6 @@ volumes:
   sonarqube_data:
   sonarqube_extensions:
   srm_uploads: # Essential for cross-service PDF handling
+  loki_config:
+  prometheus_config:
+  promtail_config:

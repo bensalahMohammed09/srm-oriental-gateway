@@ -56,17 +56,36 @@ pipeline {
                     def rawDiff = sh(script: "git diff --name-only ${lastSuccess} ${env.GIT_COMMIT} || echo ''", returnStdout: true).trim()
                     changedFiles = rawDiff.tokenize('\n')
 
+                    def runSonar = false
+                    def runNpm = false
+                    def runBandit = false
+                    def isForceAll = false
+
                     for (file in changedFiles) {
                         echo "Analyzing: ${file}"
 
                         if (file == 'docker-compose.yml' || file == ".env.example") {
-                            env.FORCE_ALL = "true"
+                            isForceAll = "true"
                             echo "Critical file changed: ${file}. Setting FORCE_ALL to true."
                         }
 
-                        if (file.startsWith('src/backend/')) { env.RUN_SONAR_BACKEND = "true" }
-                        if (file.startsWith('src/frontend/')) { env.RUN_SCAN_FRONTEND = "true" }
-                        if (file.startsWith('src/workers/')) { env.RUN_SCAN_WORKER = "true" }
+                        if (file.startsWith('src/backend/')) { 
+                            runSonar = true
+                            isForceAll = true
+                        }
+                        if (file.startsWith('src/frontend/')) { 
+                            runNpm = true
+                            isForceAll = true
+                        }
+                        if (file.startsWith('src/workers/')) { 
+                            runBandit = true
+                            isForceAll = true
+                        }
+
+                        env.FORCE_ALL = isForceAll.toString()
+                        env.RUN_SONAR_BACKEND = runSonar.toString()
+                        env.RUN_SCAN_FRONTEND = runNpm.toString()
+                        env.RUN_SCAN_WORKER = runBandit.toString()
                     }
                 }
             }
@@ -84,7 +103,7 @@ pipeline {
 
         stage('3. Backend Analysis with SonarQube') {
             when { 
-                expression { env.RUN_SONAR_BACKEND == "true" || env.FORCE_ALL == "true" } 
+                expression { env.RUN_SONAR_BACKEND == "true" } 
             }
             steps {
                 script {
@@ -124,7 +143,7 @@ pipeline {
             parallel {
                 stage('Frontend - NPM Audit') {
                     when {
-                        expression { env.RUN_SCAN_FRONTEND == "true" || env.FORCE_ALL == "true" }
+                        expression { env.RUN_SCAN_FRONTEND == "true"}
                     }
                     steps {
                         dir('src/frontend') {
@@ -135,7 +154,7 @@ pipeline {
                 }
                 stage('Worker - Bandit Scan') {
                     when {
-                        expression { env.RUN_SCAN_WORKER == "true" || env.FORCE_ALL == "true" }
+                        expression { env.RUN_SCAN_WORKER == "true"}
                     }
                     steps {
                         dir('src/workers/ocr-service') {
@@ -187,7 +206,29 @@ pipeline {
         stage('7. Orchestrated Compose') {
             steps {
                 script {
-                    sh "ls -F infra/loki/loki-config.yml"
+                    echo "Injecting configuration files into Docker volumes..."
+                    
+                    // 1. Create the volumes if they don't exist
+                    sh "docker volume create srm-oriental-gateway_loki_config || true"
+                    sh "docker volume create srm-oriental-gateway_prometheus_config || true"
+                    sh "docker volume create srm-oriental-gateway_promtail_config || true"
+                    
+                    // 2. Use a temporary Alpine container to copy files from Jenkins to the Volumes
+                    // $(pwd) is the Jenkins workspace where the real files are
+                    sh """
+                        docker run --rm \
+                        -v \$(pwd)/infra/loki:/loki_src \
+                        -v \$(pwd)/infra/prometheus:/prom_src \
+                        -v \$(pwd)/infra/promtail:/promtail_src \
+                        -v srm-oriental-gateway_loki_config:/loki_dest \
+                        -v srm-oriental-gateway_prometheus_config:/prom_dest \
+                        -v srm-oriental-gateway_promtail_config:/promtail_dest \
+                        alpine sh -c "
+                            cp /loki_src/loki-config.yml /loki_dest/local-config.yaml && \
+                            cp /prom_src/prometheus.yml /prom_dest/prometheus.yml && \
+                            cp /promtail_src/promtail-config.yml /promtail_dest/config.yml
+                        "
+                    """
                     echo "Starting Docker Compose with updated images..."
                     sh "docker compose up -d --remove-orphans \$(docker compose config --services | grep -vE 'jenkins-srm|sonarqube|sonar-db')"
 
