@@ -54,39 +54,28 @@ pipeline {
                     def lastSuccess = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: "HEAD~1"
                     def rawDiff = sh(script: "git diff --name-only ${lastSuccess} ${env.GIT_COMMIT} || echo ''", returnStdout: true).trim()
                     changedFiles = rawDiff.tokenize('\n')
-
-                    def runSonar = false
-                    def runNpm = false
-                    def runBandit = false
-                    def isForceAll = false
-
                     for (file in changedFiles) {
                         echo "Analyzing: ${file}"
 
                         if (file == 'docker-compose.yml' || file == ".env.example") {
-                            isForceAll = true
+                            env.FORCE_ALL = "true"
                             echo "Critical file changed: ${file}. Setting FORCE_ALL to true."
                         }
 
                         if (file.startsWith('src/backend/')) { 
-                            runSonar = true
-                            isForceAll = true
+                            env.RUN_SONAR_BACKEND = "true"
+                            env.FORCE_ALL = "true"
                         }
                         if (file.startsWith('src/frontend/')) { 
-                            runNpm = true
-                            isForceAll = true
+                            env.RUN_SCAN_FRONTEND = "true"
+                            env.FORCE_ALL = "true"
                         }
                         if (file.startsWith('src/workers/')) { 
-                            runBandit = true
-                            isForceAll = true
+                            env.RUN_SCAN_WORKER = "true"
+                            env.FORCE_ALL = "true"
                         }
 
-                        env.FORCE_ALL = isForceAll.toString()
                     }
-                    
-                    env.RUN_SONAR_BACKEND = runSonar.toString()
-                    env.RUN_SCAN_FRONTEND = runNpm.toString()
-                    env.RUN_SCAN_WORKER = runBandit.toString()
                 }
             }
         }
