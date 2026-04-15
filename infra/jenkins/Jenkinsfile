@@ -49,13 +49,12 @@ pipeline {
 
         stage('1. Intelligent Path Detection') {
             steps {
-                script {
+                script {                    
+                    def lastSuccess = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: "HEAD~1"
+                    def rawDiff = sh(script: "git diff --name-only ${lastSuccess} ${env.GIT_COMMIT} || echo ''", returnStdout: true).trim()
                     echo "Last Success: ${lastSuccess}"
                     echo "Current Commit: ${env.GIT_COMMIT}"
                     sh "git log --oneline -5"  // ← see the last 5 commits to understand what's being compared
-
-                    def lastSuccess = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: "HEAD~1"
-                    def rawDiff = sh(script: "git diff --name-only ${lastSuccess} ${env.GIT_COMMIT} || echo ''", returnStdout: true).trim()
                     changedFiles = rawDiff.tokenize('\n')
                     for (file in changedFiles) {
                         echo "Analyzing: ${file}"
