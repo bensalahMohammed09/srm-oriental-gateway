@@ -65,7 +65,7 @@ pipeline {
                         echo "Analyzing: ${file}"
 
                         if (file == 'docker-compose.yml' || file == ".env.example") {
-                            isForceAll = "true"
+                            isForceAll = true
                             echo "Critical file changed: ${file}. Setting FORCE_ALL to true."
                         }
 
@@ -81,12 +81,11 @@ pipeline {
                             runBandit = true
                             isForceAll = true
                         }
-
-                        env.FORCE_ALL = isForceAll.toString()
-                        env.RUN_SONAR_BACKEND = runSonar.toString()
-                        env.RUN_SCAN_FRONTEND = runNpm.toString()
-                        env.RUN_SCAN_WORKER = runBandit.toString()
                     }
+                    env.FORCE_ALL = isForceAll.toString()
+                    env.RUN_SONAR_BACKEND = runSonar.toString()
+                    env.RUN_SCAN_FRONTEND = runNpm.toString()
+                    env.RUN_SCAN_WORKER = runBandit.toString()
                 }
             }
         }
