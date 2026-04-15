@@ -213,20 +213,16 @@ pipeline {
                     echo "Démarrage de la stack..."
                     sh "docker rm -f n8n || true"
                     echo "⏳ Attente de la libération du port 5679 par WSL2..."
-                    retry(10) { // On essaie 10 fois
-                        sh """
-                            # Si on ne trouve pas de processus sur le port, on sort avec succès
-                            # Sinon on attend 2s et on échoue (ce qui déclenche le retry)
-                            if ! (netstat -an | grep 5679 | grep LISTEN); then
-                                exit 0
-                            else
-                                sleep 2
-                                exit 1
-                            fi
+                    sh "sleep 5"
+                    
+                    
+                      sh """
+                            docker compose up -d \
+                            --force-recreate \
+                            --always-recreate-deps \
+                            --remove-orphans \
+                            \$(docker compose config --services | grep -vE 'jenkins-srm|sonarqube|sonar-db')
                         """
-                    }
-                    sh "docker compose up -d --remove-orphans --force-recreate \$(docker compose config --services | grep -vE 'jenkins-srm|sonarqube|sonar-db')"
-
                     echo "Cleaning up...."
                     sh "docker system prune -f"
                 }
