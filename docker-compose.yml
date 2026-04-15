@@ -157,7 +157,6 @@ services:
       - N8N_PROTOCOL=http
       - NODE_ENV=development
       - WEBHOOK_URL=http://localhost:${N8N_EXTERNAL_PORT}/ 
-      # comment to test git commit  
     volumes:
       - n8n_data:/home/node/.n8n
     networks:

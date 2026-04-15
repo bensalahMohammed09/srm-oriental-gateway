@@ -76,7 +76,7 @@ pipeline {
                             env.RUN_SCAN_WORKER = "true"
                             env.FORCE_ALL = "true"
                         }
-
+                        echo "DEBUG before stage ends — FORCE_ALL is: ${env.FORCE_ALL}"
                     }
                 }
             }
