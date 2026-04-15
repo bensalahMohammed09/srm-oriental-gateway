@@ -47,38 +47,38 @@ pipeline {
             }
         }
 
-        stage('1. Intelligent Path Detection') {
+      stage('1. Intelligent Path Detection') {
     steps {
         script {
-            // 1. Détection robuste du diff (uniquement le commit actuel)
+            // 1. Détection du diff (Texte brut)
             def rawDiff = sh(
                 script: "git diff-tree --no-commit-id --name-only -r HEAD", 
                 returnStdout: true
             ).trim()
 
-            // 2. Nettoyage de la liste (gère \r\n Windows et supprime les lignes vides)
-            def fileList = rawDiff.split('\r?\n').collect { it.trim() }.findAll { it != '' }
-            echo "Fichiers modifiés : ${fileList}"
+            echo "Fichiers bruts :\n${rawDiff}"
 
-            // 3. Évaluation spécifique (Sans AUCUNE boucle for)
-            // On demande directement à la liste si elle contient ces valeurs
-            boolean forceAll  = fileList.contains('docker-compose.yml') || fileList.contains('.env.example')
-            boolean runSonar  = fileList.any { it.startsWith('src/backend/') }
-            boolean runNpm    = fileList.any { it.startsWith('src/frontend/') }
-            boolean runBandit = fileList.any { it.startsWith('src/workers/') }
-            // 5. La règle Trivy (Le scanner global de sécurité)
-            // Lancer Trivy si n'importe quel code source ou fichier d'infrastructure a changé
+            // 2. L'astuce ultime : on encadre le texte de sauts de ligne.
+            // Cela permet de chercher des chemins exacts sans utiliser de listes ou Regex.
+            def safeDiff = "\n" + rawDiff + "\n"
+
+            // 3. Évaluation via recherche de texte simple (Impossible à faire planter par Jenkins)
+            boolean forceAll  = safeDiff.contains('\ndocker-compose.yml\n') || safeDiff.contains('\n.env.example\n')
+            boolean runSonar  = safeDiff.contains('\nsrc/backend/')
+            boolean runNpm    = safeDiff.contains('\nsrc/frontend/')
+            boolean runBandit = safeDiff.contains('\nsrc/workers/')
+
+            // 5. La règle Trivy
+            // Si n'importe quel scan s'active, l'image change, donc on lance Trivy.
             boolean runTrivy = (forceAll || runSonar || runNpm || runBandit)
 
             // 6. Injection dans l'environnement Jenkins
-            // L'environnement garantit que les variables sont accessibles dans les stages suivants
             env.FORCE_ALL         = forceAll.toString()
             env.RUN_SONAR_BACKEND = runSonar.toString()
             env.RUN_SCAN_FRONTEND = runNpm.toString()
             env.RUN_SCAN_WORKER   = runBandit.toString()
             env.RUN_TRIVY         = runTrivy.toString()
 
-            // 7. Log récapitulatif pour le debug Console
             echo """
             =========================
             --- ÉTAT DES SCANS ---
