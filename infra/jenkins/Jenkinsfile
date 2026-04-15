@@ -57,31 +57,20 @@ pipeline {
             ).trim()
 
             // 2. Nettoyage de la liste (gère \r\n Windows et supprime les lignes vides)
-            changedFiles = rawDiff.split('\r?\n').collect { it.trim() }.findAll { it != '' }
-            echo "Fichiers modifiés : ${changedFiles}"
+            def fileList = rawDiff.split('\r?\n').collect { it.trim() }.findAll { it != '' }
+            echo "Fichiers modifiés : ${fileList}"
 
-            // 3. Variables de déclenchement (Indépendantes)
-            boolean forceAll  = false
-            boolean runSonar  = false
-            boolean runNpm    = false
-            boolean runBandit = false
-
-            // 4. Évaluation spécifique du chemin (Smart Build)
-            for (file in changedFiles) {
-                if (file == 'docker-compose.yml' || file == '.env.example') { forceAll = true }
-                if (file.startsWith('src/backend/'))  { runSonar = true }
-                if (file.startsWith('src/frontend/')) { runNpm = true }
-                if (file.startsWith('src/workers/'))  { runBandit = true }
-            }
-
+            // 3. Évaluation spécifique (Sans AUCUNE boucle for)
+            // On demande directement à la liste si elle contient ces valeurs
+            boolean forceAll  = fileList.contains('docker-compose.yml') || fileList.contains('.env.example')
+            boolean runSonar  = fileList.any { it.startsWith('src/backend/') }
+            boolean runNpm    = fileList.any { it.startsWith('src/frontend/') }
+            boolean runBandit = fileList.any { it.startsWith('src/workers/') }
             // 5. La règle Trivy (Le scanner global de sécurité)
             // Lancer Trivy si n'importe quel code source ou fichier d'infrastructure a changé
             boolean runTrivy = (forceAll || runSonar || runNpm || runBandit)
 
-            // 6. La règle d'Infrastructure Globale
-            // Si l'infrastructure (docker-compose, .env) change, on force tous les scans
-
-            // 7. Injection dans l'environnement Jenkins
+            // 6. Injection dans l'environnement Jenkins
             // L'environnement garantit que les variables sont accessibles dans les stages suivants
             env.FORCE_ALL         = forceAll.toString()
             env.RUN_SONAR_BACKEND = runSonar.toString()
@@ -89,7 +78,7 @@ pipeline {
             env.RUN_SCAN_WORKER   = runBandit.toString()
             env.RUN_TRIVY         = runTrivy.toString()
 
-            // 8. Log récapitulatif pour le debug Console
+            // 7. Log récapitulatif pour le debug Console
             echo """
             =========================
             --- ÉTAT DES SCANS ---
