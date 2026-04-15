@@ -205,34 +205,38 @@ pipeline {
         stage('7. Orchestrated Compose') {
             steps {
                 script {
-                    echo "Injecting configuration files into Docker volumes..."
+                    echo "Nettoyage et préparation des volumes..."
+                    def projectPrefix = "srm-oriental-gateway"
                     
-                    // 1. Create the volumes if they don't exist
-                    sh "docker volume create srm-oriental-gateway_loki_config || true"
-                    sh "docker volume create srm-oriental-gateway_prometheus_config || true"
-                    sh "docker volume create srm-oriental-gateway_promtail_config || true"
+                    // On force la suppression et la recréation pour être SÛR qu'il n'y a pas de vieux dossiers
+                    sh "docker volume rm ${projectPrefix}_loki_config || true"
+                    sh "docker volume rm ${projectPrefix}_prometheus_config || true"
+                    sh "docker volume rm ${projectPrefix}_promtail_config || true"
                     
-                    // 2. Use a temporary Alpine container to copy files from Jenkins to the Volumes
-                    // $(pwd) is the Jenkins workspace where the real files are
+                    sh "docker volume create ${projectPrefix}_loki_config"
+                    sh "docker volume create ${projectPrefix}_prometheus_config"
+                    sh "docker volume create ${projectPrefix}_promtail_config"
+                    
+                    echo "Injection des fichiers..."
                     sh """
                         docker run --rm \
                         -v \$(pwd)/infra/loki:/loki_src \
                         -v \$(pwd)/infra/prometheus:/prom_src \
                         -v \$(pwd)/infra/promtail:/promtail_src \
-                        -v srm-oriental-gateway_loki_config:/loki_dest \
-                        -v srm-oriental-gateway_prometheus_config:/prom_dest \
-                        -v srm-oriental-gateway_promtail_config:/promtail_dest \
+                        -v ${projectPrefix}_loki_config:/loki_dest \
+                        -v ${projectPrefix}_prometheus_config:/prom_dest \
+                        -v ${projectPrefix}_promtail_config:/promtail_dest \
                         alpine sh -c "
-                            cp /loki_src/loki-config.yml /loki_dest/local-config.yaml && \
-                            cp /prom_src/prometheus.yml /prom_dest/prometheus.yml && \
+                            # On s'assure que les destinations ne sont pas des dossiers avant de copier
+                            rm -rf /loki_dest/* /prom_dest/* /promtail_dest/*
+                            cp /loki_src/loki-config.yml /loki_dest/local-config.yaml
+                            cp /prom_src/prometheus.yml /prom_dest/prometheus.yml
                             cp /promtail_src/promtail-config.yml /promtail_dest/config.yml
                         "
                     """
-                    echo "Starting Docker Compose with updated images..."
-                    sh "docker compose up -d --remove-orphans \$(docker compose config --services | grep -vE 'jenkins-srm|sonarqube|sonar-db')"
 
-                    echo "Infrastructure updated. Cleaning up dangling images..."
-                    sh "docker image prune -f"
+                    echo "Démarrage final..."
+                    sh "docker compose up -d --remove-orphans --force-recreate \$(docker compose config --services | grep -vE 'jenkins-srm|sonarqube|sonar-db')"
                 }
             }
         }
