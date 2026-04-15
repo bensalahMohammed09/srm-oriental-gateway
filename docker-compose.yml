@@ -151,7 +151,7 @@ services:
     user: "1000:1000"
     ports:
       - "${N8N_EXTERNAL_PORT}:${N8N_INTERNAL_PORT}"
-    stop_grace_period: 60s
+    stop_grace_period: 30s
     environment:
       - N8N_HOST=${N8N_HOST:-localhost}
       - N8N_PORT=${N8N_INTERNAL_PORT}
