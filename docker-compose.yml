@@ -96,7 +96,6 @@ services:
         WORKER_ENV:    ${WORKER_ENV}
     container_name: srm-ocr-worker
     volumes:
-      - ./src/workers/ocr-service:/home/srm_worker/app  # Live development sync
       - srm_uploads:/home/srm_worker/app/uploads        # Shared folder to read PDFs
     deploy:
       resources:
