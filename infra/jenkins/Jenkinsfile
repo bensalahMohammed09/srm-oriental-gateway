@@ -50,32 +50,32 @@ pipeline {
         stage('1. Intelligent Path Detection') {
             steps{
                 script{
-                    def lastSuccess = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: "HEAD~1"
-                            def rawDiff = sh(script: "git log --name-only --pretty=format: ${lastSuccess}..${env.GIT_COMMIT} || echo ''", returnStdout: true).trim()
-                            def changedFiles = rawDiff.tokenize('\n').findAll { it.trim() != '' }
-                            // collect into plain groovy booleans first
-                            def forceAll  = false
-                            def sonar     = false
-                            def npm       = false
-                            def bandit    = false
+                        def lastSuccess = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: "HEAD~1"
+                        def rawDiff = sh(script: "git log --name-only --pretty=format: ${lastSuccess}..${env.GIT_COMMIT} || echo ''", returnStdout: true).trim()
+                        changedFiles = rawDiff.tokenize('\n')
+                        // collect into plain groovy booleans first
+                        def forceAll  = false
+                        def sonar     = false
+                        def npm       = false
+                        def bandit    = false
 
-                            for (file in changedFiles) {
+                        for (file in changedFiles) {
                                     echo "Analyzing: ${file}"
                                     if (file == 'docker-compose.yml' || file == '.env.example') { forceAll = true }
                                     if (file.startsWith('src/backend/'))  { sonar = true; forceAll = true }
                                     if (file.startsWith('src/frontend/')) { npm   = true; forceAll = true }
                                     if (file.startsWith('src/workers/'))  { bandit = true; forceAll = true }
-                            }
-                            // write to env ONCE after the loop — outside closure scope issues
-                            env.FORCE_ALL         = forceAll.toString()
-                            env.RUN_SONAR_BACKEND = sonar.toString()
-                            env.RUN_SCAN_FRONTEND = npm.toString()
-                            env.RUN_SCAN_WORKER   = bandit.toString()
+                        }
+                        // write to env ONCE after the loop — outside closure scope issues
+                        env.FORCE_ALL         = forceAll.toString()
+                        env.RUN_SONAR_BACKEND = sonar.toString()
+                        env.RUN_SCAN_FRONTEND = npm.toString()
+                        env.RUN_SCAN_WORKER   = bandit.toString()
 
-                            echo "DEBUG — FORCE_ALL: ${env.FORCE_ALL}"
+                        echo "DEBUG — FORCE_ALL: ${env.FORCE_ALL}"
+                    }
                 }
             }
-        }
             
 
         stage('2. Verification') {
