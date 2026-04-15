@@ -58,12 +58,14 @@ pipeline {
                         def npm       = false
                         def bandit    = false
 
-                        for (file in changedFiles) {
-                                    echo "Analyzing: ${file}"
-                                    if (file == 'docker-compose.yml' || file == '.env.example') { forceAll = true }
-                                    if (file.startsWith('src/backend/'))  { sonar = true; forceAll = true }
-                                    if (file.startsWith('src/frontend/')) { npm   = true; forceAll = true }
-                                    if (file.startsWith('src/workers/'))  { bandit = true; forceAll = true }
+                        for (rawFile in changedFiles) {
+
+                            def file = rawFile.trim()
+                            echo "Analyzing: ${file}"
+                            if (file == 'docker-compose.yml' || file == '.env.example') { forceAll = true }
+                            if (file.startsWith('src/backend/'))  { sonar = true; forceAll = true }
+                            if (file.startsWith('src/frontend/')) { npm   = true; forceAll = true }
+                            if (file.startsWith('src/workers/'))  { bandit = true; forceAll = true }
                         }
                         // write to env ONCE after the loop — outside closure scope issues
                         env.FORCE_ALL         = forceAll.toString()
