@@ -22,6 +22,7 @@ pipeline {
        RUN_SCAN_FRONTEND = "false"
        RUN_SCAN_WORKER = "false"
        FORCE_ALL = "false"
+       RUN_TRIVY = "false"
        GIT_SHA = ""
     }
 
@@ -47,46 +48,61 @@ pipeline {
         }
 
         stage('1. Intelligent Path Detection') {
-            steps{
-                script{
-                        def lastSuccess = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: "HEAD~1"
-                        def rawDiff = sh(script: "git log --name-only --pretty=format: ${lastSuccess}..${env.GIT_COMMIT} || echo ''", returnStdout: true).trim()
-                        changedFiles = rawDiff.tokenize('\n')
-                        boolean forceAll = changedFiles.any { file ->
-                        file == 'docker-compose.yml' || 
-                        file == '.env.example' || 
-                        file.startsWith('src/backend/') || 
-                        file.startsWith('src/frontend/') || 
-                        file.startsWith('src/workers/')
-                    }
+    steps {
+        script {
+            // 1. Détection robuste du diff (uniquement le commit actuel)
+            def rawDiff = sh(
+                script: "git diff-tree --no-commit-id --name-only -r HEAD", 
+                returnStdout: true
+            ).trim()
 
-                    // 3. Application de votre règle de synchronisation globale
-                        boolean sonar  = forceAll
-                        boolean npm    = forceAll
-                        boolean bandit = forceAll
+            // 2. Nettoyage de la liste (gère \r\n Windows et supprime les lignes vides)
+            changedFiles = rawDiff.split('\r?\n').collect { it.trim() }.findAll { it != '' }
+            echo "Fichiers modifiés : ${changedFiles}"
 
-                    // 4. Écriture directe et finale dans l'environnement
-                    env.FORCE_ALL         = forceAll.toString()
-                    env.RUN_SONAR_BACKEND = sonar.toString()
-                    env.RUN_SCAN_FRONTEND = npm.toString()
-                    env.RUN_SCAN_WORKER   = bandit.toString()
+            // 3. Variables de déclenchement (Indépendantes)
+            boolean forceAll  = false
+            boolean runSonar  = false
+            boolean runNpm    = false
+            boolean runBandit = false
 
-                    echo "DEBUG — FORCE_ALL is now: ${env.FORCE_ALL}"
-                    }
-                }
+            // 4. Évaluation spécifique du chemin (Smart Build)
+            for (file in changedFiles) {
+                if (file == 'docker-compose.yml' || file == '.env.example') { forceAll = true }
+                if (file.startsWith('src/backend/'))  { runSonar = true }
+                if (file.startsWith('src/frontend/')) { runNpm = true }
+                if (file.startsWith('src/workers/'))  { runBandit = true }
             }
-            
 
-        stage('2. Verification') {
-            steps {
-                echo "--- Decision Matrix ---"
-                echo "Analyze Backend(SonarQube): ${env.RUN_SONAR_BACKEND}"
-                echo "Analyze Frontend(NPM): ${env.RUN_SCAN_FRONTEND}"
-                echo "Analyze Worker(Bandit): ${env.RUN_SCAN_WORKER}"
-                echo "Force All: ${env.FORCE_ALL}"
-            }
+            // 5. La règle Trivy (Le scanner global de sécurité)
+            // Lancer Trivy si n'importe quel code source ou fichier d'infrastructure a changé
+            boolean runTrivy = (forceAll || runSonar || runNpm || runBandit)
+
+            // 6. La règle d'Infrastructure Globale
+            // Si l'infrastructure (docker-compose, .env) change, on force tous les scans
+
+            // 7. Injection dans l'environnement Jenkins
+            // L'environnement garantit que les variables sont accessibles dans les stages suivants
+            env.FORCE_ALL         = forceAll.toString()
+            env.RUN_SONAR_BACKEND = runSonar.toString()
+            env.RUN_SCAN_FRONTEND = runNpm.toString()
+            env.RUN_SCAN_WORKER   = runBandit.toString()
+            env.RUN_TRIVY         = runTrivy.toString()
+
+            // 8. Log récapitulatif pour le debug Console
+            echo """
+            =========================
+            --- ÉTAT DES SCANS ---
+            FORCE_ALL : ${env.FORCE_ALL}
+            BACKEND   : ${env.RUN_SONAR_BACKEND}
+            FRONTEND  : ${env.RUN_SCAN_FRONTEND}
+            WORKER    : ${env.RUN_SCAN_WORKER}
+            TRIVY     : ${env.RUN_TRIVY}
+            =========================
+            """
         }
-
+    }
+}
         stage('3. Backend Analysis with SonarQube') {
             when { 
                 expression { env.RUN_SONAR_BACKEND == "true" } 
@@ -154,7 +170,7 @@ pipeline {
 
         stage('5. Mandatory Full Scan') {
             when {
-                expression { env.FORCE_ALL == "true" }
+                expression { env.RUN_TRIVY == "true" }
             }
             steps {
                 echo "Running full scans for all components due to critical changes..."

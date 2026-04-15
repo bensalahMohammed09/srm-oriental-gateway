@@ -163,7 +163,7 @@ services:
     networks:
       - ops-net
     restart: unless-stopped
-    #
+    
 
   # ----------------------------------------------------------------------------
   # OBSERVABILITY STACK (Prometheus, Loki, Grafana, Promtail)
