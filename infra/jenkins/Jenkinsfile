@@ -15,6 +15,17 @@ def getServiceMap() {
 
 def changedFiles = []
 
+def analyzeFiles(List files) {
+    def result = [forceAll: false, sonar: false, npm: false, bandit: false]
+    for (file in files) {
+        if (file == 'docker-compose.yml' || file == '.env.example') { result.forceAll = true }
+        if (file.startsWith('src/backend/'))  { result.sonar = true; result.forceAll = true }
+        if (file.startsWith('src/frontend/')) { result.npm   = true; result.forceAll = true }
+        if (file.startsWith('src/workers/'))  { result.bandit = true; result.forceAll = true }
+    }
+    return result
+}
+
 pipeline {
     agent any
 
@@ -53,26 +64,13 @@ pipeline {
                         def lastSuccess = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: "HEAD~1"
                         def rawDiff = sh(script: "git log --name-only --pretty=format: ${lastSuccess}..${env.GIT_COMMIT} || echo ''", returnStdout: true).trim()
                         changedFiles = rawDiff.tokenize('\n')
-                        // collect into plain groovy booleans first
-                        def forceAll  = false
-                        def sonar     = false
-                        def npm       = false
-                        def bandit    = false
 
-                        for (file in changedFiles) {
-                                    echo "Analyzing: ${file}"
-                                    if (file == 'docker-compose.yml' || file == '.env.example') { forceAll = true }
-                                    if (file.startsWith('src/backend/'))  { sonar = true; forceAll = true }
-                                    if (file.startsWith('src/frontend/')) { npm   = true; forceAll = true }
-                                    if (file.startsWith('src/workers/'))  { bandit = true; forceAll = true }
-                        }
-                        // write to env ONCE after the loop — outside closure scope issues
-                        env.FORCE_ALL         = forceAll.toString()
-                        env.RUN_SONAR_BACKEND = sonar.toString()
-                        env.RUN_SCAN_FRONTEND = npm.toString()
-                        env.RUN_SCAN_WORKER   = bandit.toString()
-
-                        echo "DEBUG — FORCE_ALL: ${env.FORCE_ALL}"
+                       def result = analyzeFiles(changedFiles)
+                       env.FORCE_ALL = result.forceAll.toString()
+                       env.RUN_SONAR_BACKEND = result.sonar.toString()
+                       env.RUN_SCAN_FRONTEND = result.npm.toString()
+                       env.RUN_SCAN_WORKER = result.bandit.toString()
+                       echo "DEBUG — FORCE_ALL: ${env.FORCE_ALL}"
                     }
                 }
             }
