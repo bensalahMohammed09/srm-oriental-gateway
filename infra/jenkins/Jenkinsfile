@@ -24,7 +24,6 @@ pipeline {
        RUN_SCAN_WORKER = "false"
        FORCE_ALL = "false"
        GIT_SHA = ""
-       CHANGED_FILES =  ""
     }
 
     stages {
@@ -81,8 +80,10 @@ pipeline {
                             runBandit = true
                             isForceAll = true
                         }
+
+                        env.FORCE_ALL = isForceAll.toString()
                     }
-                    env.FORCE_ALL = isForceAll.toString()
+                    
                     env.RUN_SONAR_BACKEND = runSonar.toString()
                     env.RUN_SCAN_FRONTEND = runNpm.toString()
                     env.RUN_SCAN_WORKER = runBandit.toString()
