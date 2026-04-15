@@ -51,7 +51,7 @@ pipeline {
             steps {
                 script {                    
                     def lastSuccess = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: "HEAD~1"
-                    def rawDiff = sh(script: "git diff --name-only ${lastSuccess} ${env.GIT_COMMIT} || echo ''", returnStdout: true).trim()
+                    def rawDiff = sh(script: "git log --name-only --pretty=format: ${lastSuccess}..${env.GIT_COMMIT} || echo ''", returnStdout: true).trim()
                     echo "Last Success: ${lastSuccess}"
                     echo "Current Commit: ${env.GIT_COMMIT}"
                     sh "git log --oneline -5"  // ← see the last 5 commits to understand what's being compared
