@@ -211,11 +211,6 @@ pipeline {
                     sh "cat infra/promtail/promtail-config.yml | docker run --rm -i -v ${projectPrefix}_promtail_config:/dest alpine sh -c 'cat > /dest/config.yml'"
 
                     echo "Démarrage de la stack..."
-                    sh "docker rm -f n8n || true"
-                    echo "⏳ Attente de la libération du port 5679 par WSL2..."
-                    sh "sleep 5"
-                    
-                    
                       sh """
                             docker compose up -d \
                             --force-recreate \
