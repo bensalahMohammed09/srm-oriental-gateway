@@ -157,9 +157,6 @@ services:
       - N8N_PROTOCOL=http
       - NODE_ENV=development
       - WEBHOOK_URL=http://localhost:${N8N_EXTERNAL_PORT}/
-      - N8N_PROTOCOL=http
-      # On force n8n à ne pas utiliser de worker externe si non nécessaire
-      - N8N_EXECUTORS_PROCESS=main 
     volumes:
       - n8n_data:/home/node/.n8n
     networks:
