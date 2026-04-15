@@ -48,39 +48,35 @@ pipeline {
         }
 
         stage('1. Intelligent Path Detection') {
-            steps {
-                script {                    
+            steps{
+                script{
                     def lastSuccess = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: "HEAD~1"
-                    def rawDiff = sh(script: "git log --name-only --pretty=format: ${lastSuccess}..${env.GIT_COMMIT} || echo ''", returnStdout: true).trim()
-                    echo "Last Success: ${lastSuccess}"
-                    echo "Current Commit: ${env.GIT_COMMIT}"
-                    sh "git log --oneline -5"  // ← see the last 5 commits to understand what's being compared
-                    changedFiles = rawDiff.tokenize('\n')
-                    for (file in changedFiles) {
-                        echo "Analyzing: ${file}"
+                            def rawDiff = sh(script: "git log --name-only --pretty=format: ${lastSuccess}..${env.GIT_COMMIT} || echo ''", returnStdout: true).trim()
+                            def changedFiles = rawDiff.tokenize('\n').findAll { it.trim() != '' }
+                            // collect into plain groovy booleans first
+                            def forceAll  = false
+                            def sonar     = false
+                            def npm       = false
+                            def bandit    = false
 
-                        if (file == 'docker-compose.yml' || file == ".env.example") {
-                            env.FORCE_ALL = "true"
-                            echo "Critical file changed: ${file}. Setting FORCE_ALL to true."
-                        }
+                            for (file in changedFiles) {
+                                    echo "Analyzing: ${file}"
+                                    if (file == 'docker-compose.yml' || file == '.env.example') { forceAll = true }
+                                    if (file.startsWith('src/backend/'))  { sonar = true; forceAll = true }
+                                    if (file.startsWith('src/frontend/')) { npm   = true; forceAll = true }
+                                    if (file.startsWith('src/workers/'))  { bandit = true; forceAll = true }
+                            }
+                            // write to env ONCE after the loop — outside closure scope issues
+                            env.FORCE_ALL         = forceAll.toString()
+                            env.RUN_SONAR_BACKEND = sonar.toString()
+                            env.RUN_SCAN_FRONTEND = npm.toString()
+                            env.RUN_SCAN_WORKER   = bandit.toString()
 
-                        if (file.startsWith('src/backend/')) { 
-                            env.RUN_SONAR_BACKEND = "true"
-                            env.FORCE_ALL = "true"
-                        }
-                        if (file.startsWith('src/frontend/')) { 
-                            env.RUN_SCAN_FRONTEND = "true"
-                            env.FORCE_ALL = "true"
-                        }
-                        if (file.startsWith('src/workers/')) { 
-                            env.RUN_SCAN_WORKER = "true"
-                            env.FORCE_ALL = "true"
-                        }
-                        echo "DEBUG before stage ends — FORCE_ALL is: ${env.FORCE_ALL}"
-                    }
+                            echo "DEBUG — FORCE_ALL: ${env.FORCE_ALL}"
                 }
             }
         }
+            
 
         stage('2. Verification') {
             steps {

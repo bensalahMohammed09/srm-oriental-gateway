@@ -226,7 +226,7 @@ services:
           memory: 256M
     networks:
       - ops-net
-
+# add 
   promtail:
     build:
       context: .
