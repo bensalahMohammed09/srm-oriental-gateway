@@ -8,31 +8,23 @@ pipeline {
        RUN_SCAN_WORKER = "false"
        FORCE_ALL = "false"
        RUN_TRIVY = "false"
-       GIT_SHA = ""
     }
 
     stages {
         stage('0. Preparation') {
             steps {
-                script {
-                    echo "Cleaning workspace and fixing Git permissions..."
-                    sh "git config --global --add safe.directory '*'"
-                    checkout scm
+                echo "Cleaning workspace and fixing Git permissions..."
+                deleteDir()
 
+                sh "git -config --global --add safe.directory '*'"
+                checkout scm
 
-                    def sha = sh(script: 'git rev-parse --short HEAD',returnStdout: true).trim()
-                    env.GIT_SHA = sha
+                sh "git rev-parse --short HEAD > .git_sha"
 
-                    echo "GIT_SHA(extracted one): ${sha}"
-                    echo "GIT_SHA(environment variable): ${env.GIT_SHA}"
+                sh "echo 'GIT_SHA sauvegardé : ' && cat .git_sha"
 
-                    // Secure Secret Injection using Jenkins Credentials plugin
-                    // Ensure you have a 'Secret file' credential named 'srm-env-file' in Jenkins
-                    withCredentials([file(credentialsId: 'srm-env-file', variable: 'SECRET_ENV')]) {
-                        sh "cp \$SECRET_ENV ./.env"
-                        echo "SUCCESS: .env file injected into workspace."
-                    }
-                    
+                whitCredentials([file(credentialsId: 'srm-env-file',variable: 'SECRET_ENV')]){
+                    sh "cp \$SECRET_ENV ./.env"
                 }
             }
         }
@@ -133,6 +125,9 @@ pipeline {
         stage('5. Custom Containers build') {
             steps {
                script {
+
+                    
+                    def commitSha = readFile('.git_sha').trim()
                     def services = [
                         'infra/docker/api.Dockerfile' : 'srm-api',
                         'infra/docker/db.Dockerfile' : 'srm-db',
@@ -150,8 +145,8 @@ pipeline {
                         def varName = "BUILD_{imageName.toUpperCase().replace('-','_')}"
 
                         if(env[varName] == "true"){
-                            echo "BUILDING: ${imageName} (SHA: ${env.GIT_SHA})"
-                            sh "docker build -t ${imageName}:${env.GIT_SHA} -f ${infraPath} ."
+                            echo "BUILDING: ${imageName} (SHA: ${commitSha})"
+                            sh "docker build -t ${imageName}:${commitSha} -f ${infraPath} ."
                         } else{
                             echo "SKIP: No changes for ${imageName}"
                         }
