@@ -23,8 +23,8 @@ pipeline {
 
                 sh "echo 'GIT_SHA sauvegardé : ' && cat .git_sha"
 
-                whitCredentials([file(credentialsId: 'srm-env-file',variable: 'SECRET_ENV')]){
-                    sh "cp \$SECRET_ENV ./.env"
+                withCredentials([file(credentialsId: 'srm-env-file', variable: 'SECRET_ENV')]) {
+                        sh "cp \$SECRET_ENV ./.env"
                 }
             }
         }
@@ -128,6 +128,7 @@ pipeline {
 
                     
                     def commitSha = readFile('.git_sha').trim()
+                    echo "GIT_SHA : ${commitSha}"
                     def services = [
                         'infra/docker/api.Dockerfile' : 'srm-api',
                         'infra/docker/db.Dockerfile' : 'srm-db',
