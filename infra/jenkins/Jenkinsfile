@@ -16,7 +16,7 @@ pipeline {
                 echo "Cleaning workspace and fixing Git permissions..."
                 deleteDir()
 
-                sh "git -config --global --add safe.directory '*'"
+                sh "git config --global --add safe.directory '*'"
                 checkout scm
 
                 sh "git rev-parse --short HEAD > .git_sha"
