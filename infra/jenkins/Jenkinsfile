@@ -20,7 +20,7 @@ pipeline {
                     checkout scm
 
 
-                    def sha = sh(script: 'git rev-parse --short HEAD',returnStdout: ture).trim()
+                    def sha = sh(script: 'git rev-parse --short HEAD',returnStdout: true).trim()
                     env.GIT_SHA = sha
 
                     echo "GIT_SHA(extracted one): ${sha}"
