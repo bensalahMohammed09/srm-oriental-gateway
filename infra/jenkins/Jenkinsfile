@@ -20,11 +20,11 @@ pipeline {
                     checkout scm
                     sha = sh(script: 'git rev-parse --short HEAD',returnStdout: ture).trim()
                     env.GIT_SHA = sha
-                    if(env.GIT_SHA){
-                        echo "GIT_SHA: ${env.GIT_SHA}"
-                    }else{
-                        error "CRITICAL: No commit Git found"
-                    }
+
+                    echo "GIT_SHA(extracted one): ${sha}"
+                    echo "GIT_SHA(environment variable): ${env.GIT_SHA}"
+                   
+
 
                     // Secure Secret Injection using Jenkins Credentials plugin
                     // Ensure you have a 'Secret file' credential named 'srm-env-file' in Jenkins
