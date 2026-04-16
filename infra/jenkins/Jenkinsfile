@@ -17,10 +17,10 @@ pipeline {
                 script {
                     echo "Cleaning workspace and fixing Git permissions..."
                     sh "git config --global --add safe.directory '*'"
-                    def scmVars = checkout scm
-
-                    if(scmVars && scmVars.GIT_COMMIT){
-                        env.GIT_SHA = scmVars.GIT_COMMIT.take(7)
+                    checkout scm
+                    sha = sh(script: 'git rev-parse --short HEAD',returnStdout: ture).trim()
+                    env.GIT_SHA = sha
+                    if(env.GIT_SHA){
                         echo "GIT_SHA: ${env.GIT_SHA}"
                     }else{
                         error "CRITICAL: No commit Git found"
