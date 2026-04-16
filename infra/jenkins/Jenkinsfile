@@ -21,7 +21,7 @@ pipeline {
 
                     if(scmVars && scmVars.GIT_COMMIT){
                         env.GIT_SHA = scmVars.GIT_COMMIT.take(7)
-                        echo "GIT_SHA: ${env.GIT8=_SHA}"
+                        echo "GIT_SHA: ${env.GIT_SHA}"
                     }else{
                         error "CRITICAL: No commit Git found"
                     }
