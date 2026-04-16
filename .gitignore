@@ -50,3 +50,6 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Others
+.JOURNAL.md
