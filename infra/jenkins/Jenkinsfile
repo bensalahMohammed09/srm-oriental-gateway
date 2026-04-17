@@ -139,13 +139,18 @@ pipeline {
 
                         if(env[varName] == "true"){
                             echo "BUILDING: ${imageName} (SHA: ${commitSha})"
-                           sh """
+                          sh """
+                                # 1. Load and Export local environment variables
                                 set -a && source .env && set +a
                                 
-                                # This line converts  .env file into a list of --build-arg flags
-                                BUILD_ARGS=\$(grep -v '^#' .env | xargs -I {} echo "--build-arg {}" | xargs)
+                                # 2. Normalize variables for Cross-Platform compatibility 
+                                # This strips Windows Carriage Returns (\r) to ensure Linux/Docker compatibility
+                                BUILD_ARGS=\$(grep -v '^#' .env | tr -d '\r' | xargs -I {} echo "--build-arg {}" | xargs)
 
-                                docker build \$BUILD_ARGS -t ${imageName}:${commitSha} -f ${infraPath} .
+                                # 3. Execute build with dynamically injected arguments
+                                docker build \$BUILD_ARGS \
+                                    -t ${imageName}:${commitSha} \
+                                    -f ${infraPath} .
                             """
                         } else{
                             echo "SKIP: No changes for ${imageName}"
