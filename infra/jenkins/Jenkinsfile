@@ -139,7 +139,10 @@ pipeline {
 
                         if(env[varName] == "true"){
                             echo "BUILDING: ${imageName} (SHA: ${commitSha})"
-                            sh "docker compose build ${imageName}:${commitSha} -f ${infraPath} ."
+                           sh """
+                                set -a && source .env && set +a
+                                docker build -t ${imageName}:${commitSha} -f ${infraPath} .
+                            """
                         } else{
                             echo "SKIP: No changes for ${imageName}"
                         }
