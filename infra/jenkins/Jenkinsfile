@@ -135,7 +135,7 @@ pipeline {
                     ] 
 
                     services.each {infraPath, imageName ->
-                        def varName = "BUILD_{imageName.toUpperCase().replace('-','_')}"
+                        def varName = "BUILD_${imageName.toUpperCase().replace('-','_')}"
 
                         if(env[varName] == "true"){
                             echo "BUILDING: ${imageName} (SHA: ${commitSha})"
