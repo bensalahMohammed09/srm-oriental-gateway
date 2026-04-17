@@ -141,7 +141,11 @@ pipeline {
                             echo "BUILDING: ${imageName} (SHA: ${commitSha})"
                            sh """
                                 set -a && source .env && set +a
-                                docker build -t ${imageName}:${commitSha} -f ${infraPath} .
+                                
+                                # This line converts  .env file into a list of --build-arg flags
+                                BUILD_ARGS=\$(grep -v '^#' .env | xargs -I {} echo "--build-arg {}" | xargs)
+
+                                docker build \$BUILD_ARGS -t ${imageName}:${commitSha} -f ${infraPath} .
                             """
                         } else{
                             echo "SKIP: No changes for ${imageName}"
