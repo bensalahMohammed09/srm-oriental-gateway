@@ -30,6 +30,18 @@ public class  SrmDbContext(DbContextOptions<SrmDbContext> options) : DbContext(o
             .WithMany(d => d.Workflows)
             .HasForeignKey(w => w.DocumentId);
 
+        // Configuration User -> Role
+        modelBuilder.Entity<User>()
+            .HasOne(u => u.Role)
+            .WithMany(r => r.Users)
+            .HasForeignKey(u => u.RoleId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // Index unique sur la référence du document
+        modelBuilder.Entity<Document>()
+            .HasIndex(d => d.Reference)
+            .IsUnique();
+
         var entityTpes = modelBuilder.Model.GetEntityTypes();
         foreach(var entity in entityTpes)
         {

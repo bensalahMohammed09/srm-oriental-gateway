@@ -6,8 +6,8 @@ using Serilog.Formatting.Json;
 using Srm.Gateway.Api.Middlewares;
 using Srm.Gateway.Application.Interfaces;
 using Srm.Gateway.Infrastructure.Data;
-using Srm.Gateway.Infrastructure.Services;
 using Prometheus;
+using Srm.Gateway.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,14 +24,8 @@ builder.Host.UseSerilog();
 // --- 2. SERVICE COLLECTION (DEPENDENCY INJECTION) ---
 builder.Services.AddControllers();
 
-// Database Configuration
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddDbContext<SrmDbContext>(options =>
-    options.UseNpgsql(connectionString)
-           .UseSnakeCaseNamingConvention()); // Map C# PascalCase to Postgres snake_case
 
-// Application Services (Fixing your DI issue)
-builder.Services.AddScoped<IDocumentService, DocumentService>();
+builder.Services.AddInfrastructure(builder.Configuration);
 
 // Documentation & OpenApi (Scalar)
 builder.Services.AddOpenApi();
