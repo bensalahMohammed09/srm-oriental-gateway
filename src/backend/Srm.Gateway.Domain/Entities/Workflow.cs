@@ -5,10 +5,13 @@ public class Workflow : BaseEntity
    public Guid DocumentId { get; set; }
     public Document Document { get; set; } = null!;
     public string StepName { get; set; } = string.Empty;
-    public string RequiredRole { get; set; } = string.Empty;
-    public string CurrentStatus { get; set; } = "Pending";
-    public string? Comement;
-    public Guid? ValidatedBy { get; set; }
-    public DateTime? ValidateAt { get; set; }
+    public Guid AssignedRoleId { get; set; }
+    public Role AssignedRole { get; set; } = null!;
+
+    public string CurrentStatus { get; set; } = string.Empty;
+    public string? Comment { get; set; }
+    public Guid? ValidatedByUserId { get; set; }
+    public User? ValidatedbyUser { get; set; }
+    public DateTime? ValidatedAt { get; set; }
        
 }

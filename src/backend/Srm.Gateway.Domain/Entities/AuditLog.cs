@@ -6,5 +6,5 @@ public class AuditLog : BaseEntity
     public string EntityId { get; set; } = string.Empty;
     public string Action { get; set; } = string.Empty;
     public string Changes {  get; set; } = string.Empty;
-    public string UserId { get; set; } = string.Empty;
+    public Guid UserId { get; set; } 
 }

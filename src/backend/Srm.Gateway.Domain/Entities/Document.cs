@@ -12,6 +12,6 @@ public class Document : BaseEntity
     public Guid? CategoryId { get; set; }
     public Category? Category { get; set; }
 
-    public ICollection<OcrMetadata> Metadata { get; set; } = new List<OcrMetadata>();
-    public ICollection<Workflow> Workflows { get; set; } = new List<Workflow>();
+    public virtual ICollection<OcrMetadata> Metadata { get; set; } = new List<OcrMetadata>();
+    public virtual ICollection<Workflow> Workflows { get; set; } = new List<Workflow>();
 }

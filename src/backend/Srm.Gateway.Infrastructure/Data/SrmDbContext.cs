@@ -17,5 +17,25 @@ public class  SrmDbContext(DbContextOptions<SrmDbContext> options) : DbContext(o
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        // Configuration of mapping postgres
+
+        modelBuilder.Entity<OcrMetadata>()
+            .HasOne(m => m.Document)
+            .WithMany(d => d.Metadata)
+            .HasForeignKey(m => m.DocumentId);
+
+        modelBuilder.Entity<Workflow>()
+            .HasOne(w => w.Document)
+            .WithMany(d => d.Workflows)
+            .HasForeignKey(w => w.DocumentId);
+
+        var entityTpes = modelBuilder.Model.GetEntityTypes();
+        foreach(var entity in entityTpes)
+        {
+            modelBuilder.Entity(entity.ClrType)
+                .Property("CreatedAt")
+                .HasDefaultValueSql("CURRENT_TIMESTAMP");
+        }
     }
 }
