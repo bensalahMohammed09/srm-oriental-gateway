@@ -2,14 +2,7 @@
 pipeline {
     agent any
 
-    environment {
-       RUN_SONAR_BACKEND = "false"
-       RUN_SCAN_FRONTEND = "false"
-       RUN_SCAN_WORKER = "false"
-       FORCE_ALL = "false"
-       RUN_TRIVY = "false"
-    }
-
+   
     stages {
         stage('0. Preparation') {
             steps {

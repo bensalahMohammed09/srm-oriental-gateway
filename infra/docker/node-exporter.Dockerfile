@@ -9,7 +9,7 @@ ARG NODE_EXPORTER_INTERNAL_PORT
 
 ENV NODE_EXPORTER_PORT=${NODE_EXPORTER_INTERNAL_PORT}
 
-# add this comment to test if its working 
+
 
 USER nobody
 
