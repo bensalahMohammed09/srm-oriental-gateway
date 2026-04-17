@@ -139,6 +139,7 @@ pipeline {
                         'infra/docker/sonar-db.Dockerfile' : 'sonar-db',
                         'infra/docker/sonarqube.Dockerfile' : 'sonarqube',
                         'infra/docker/grafana.Dockerfile' : 'grafana',
+                        # ahhahahaha
                     ] 
 
                     services.each {infraPath, imageName ->
