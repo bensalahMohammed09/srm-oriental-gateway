@@ -1,10 +1,10 @@
 ﻿namespace Srm.Gateway.Domain.Entities;
 
 
-public class Status
+public class Status : BaseEntity
 {
-    public int Id { get; set; }
-    public required string Label { get; set; }
-    //Navigation properties
-    public virtual ICollection<Workflow> Documents { get; set; } = new List<Workflow>();
+   public string Name { get; set; } = string.Empty;
+   public string Code { get; set; } = string.Empty;
+
+   public ICollection<Document> Documents { get; set; } = new List<Document>();
 }

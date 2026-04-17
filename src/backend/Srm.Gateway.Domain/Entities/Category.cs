@@ -1,9 +1,9 @@
 namespace Srm.Gateway.Domain.Entities;
 
-public class Category
+public class Category : BaseEntity
 {
-    public int Id { get; set; }
-    public required string Label { get; set; }
-    //Navigation properties
-    public virtual ICollection<Document> Documents { get; set; } = new List<Document>();
+    public string Name { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public ICollection<Document> Documents { get; set; } = new List<Document>();
+
 }

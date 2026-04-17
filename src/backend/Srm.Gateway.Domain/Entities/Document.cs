@@ -1,16 +1,17 @@
 ﻿namespace Srm.Gateway.Domain.Entities;
 
-public class Document
+public class Document : BaseEntity
 {
-    public int Id { get; set; }
-    public required string ReferenceNumber { get; set; }
-    public int CategoryId { get; set; }
-    public int StatusId { get; set; }
-    public DateTime CreatedAt { get; set; } = DateTime.Now;
+   public string Reference { get; set; } = string.Empty;
+    public string SupplierName { get; set; } = string.Empty;   
+    public decimal? TotalAmount { get; set; }
 
-    // Navigation
-    public virtual Category Category { get; set; } = null!;
-    public virtual Status Status { get; set; } = null!;
-    public virtual ICollection<Workflow> Workflows { get; set; } = new List<Workflow>();
-    public virtual OcrMetadata? OcrMetadata { get; set; }
+    public Guid StatusId { get; set; }
+    public Status Status { get; set; } = null!;
+
+    public Guid? CategoryId { get; set; }
+    public Category? Category { get; set; }
+
+    public ICollection<OcrMetadata> Metadata { get; set; } = new List<OcrMetadata>();
+    public ICollection<Workflow> Workflows { get; set; } = new List<Workflow>();
 }

@@ -1,13 +1,11 @@
 ﻿namespace Srm.Gateway.Domain.Entities;
 
-public class OcrMetadata
+public class OcrMetadata : BaseEntity
 {
-    public int Id { get; set; }
-    public int DocumentId { get; set; }
-    public string? rawText { get; set; }
-    public double? ConfidenceScore { get; set; }
-    public DateOnly? ExtractedDate { get; set; }
+   public Guid DocumentId { get; set; }
+    public Document Document { get; set; } = null!;
+    public string Key { get; set; } = string.Empty;
+    public string Value { get; set; } = string.Empty;
 
-    // Navigation
-    public virtual Document Document { get; set; } = null!;
+    public double Confidence { get; set; }
 }

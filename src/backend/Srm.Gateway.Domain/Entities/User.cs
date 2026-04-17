@@ -1,17 +1,10 @@
 ﻿namespace Srm.Gateway.Domain.Entities;
 
-public class User
+public class User : BaseEntity
 {
-	
-		public int Id { get; set; }
-		public required string FirstName { get; set; }
-		public required string LastName { get; set; }
-		public required string Email { get; set; }
-		public required string PasswordHash { get; set; }
-
-       //Navigation properties
-	   public int RoleId { get; set; }
-	  public virtual Role Role { get; set; }
-	  public virtual ICollection<Workflow> Workflows { get; set; } = new List<Workflow>();
-
+	public string Username { get; set; } = string.Empty;
+	public string Email { get; set; } = string.Empty;
+	public string PasswordHash { get; set; } = string.Empty;
+	public Guid RoleId { get; set; }
+	public Role Role { get; set; } = null!;
 }

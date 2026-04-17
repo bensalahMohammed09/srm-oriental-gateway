@@ -1,14 +1,14 @@
 ﻿namespace Srm.Gateway.Domain.Entities;
 
-public class Workflow
+public class Workflow : BaseEntity
 {
-    public int Id { get; set; }
-    public int DocumentId { get; set; }
-    public int UserId { get; set; }
-    public string? ActionTaken { get; set; }
-    public DateTime ActionDate { get; set; } = DateTime.UtcNow;
-
-    // Navigation
-    public virtual Document Document { get; set; } = null!;
-    public virtual User User { get; set; } = null!;
+   public Guid DocumentId { get; set; }
+    public Document Document { get; set; } = null!;
+    public string StepName { get; set; } = string.Empty;
+    public string RequiredRole { get; set; } = string.Empty;
+    public string CurrentStatus { get; set; } = "Pending";
+    public string? Comement;
+    public Guid? ValidatedBy { get; set; }
+    public DateTime? ValidateAt { get; set; }
+       
 }

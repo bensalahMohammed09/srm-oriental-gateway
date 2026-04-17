@@ -1,9 +1,10 @@
 ﻿namespace Srm.Gateway.Domain.Entities;
 
-public class AuditLog
+public class AuditLog : BaseEntity
 {
-    public int Id { get; set; }
-    public string? EventType { get; set; }
-    public string? Description { get; set; }
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+   public string EntityName { get; set; } = string.Empty;
+    public string EntityId { get; set; } = string.Empty;
+    public string Action { get; set; } = string.Empty;
+    public string Changes {  get; set; } = string.Empty;
+    public string UserId { get; set; } = string.Empty;
 }

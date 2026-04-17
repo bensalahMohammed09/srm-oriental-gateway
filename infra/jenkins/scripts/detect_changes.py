@@ -29,7 +29,6 @@ def get_service_map():
         'infra/docker/sonar-db.Dockerfile' : 'sonar-db',
         'infra/docker/sonarqube.Dockerfile' : 'sonarqube',
         'infra/docker/grafana.Dockerfile' : 'grafana',
-        'infra/docker/jenkins.Dockerfile' : 'jenkins-srm'
     }
 
 def main():
