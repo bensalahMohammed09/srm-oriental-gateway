@@ -1,13 +1,14 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.OpenApi.Models;
+using Prometheus;
 using Scalar.AspNetCore;
 using Serilog;
 using Serilog.Events;
 using Serilog.Formatting.Json;
 using Srm.Gateway.Api.Middlewares;
 using Srm.Gateway.Application.Interfaces;
-using Srm.Gateway.Infrastructure.Data;
-using Prometheus;
 using Srm.Gateway.Infrastructure;
+using Srm.Gateway.Infrastructure.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,7 +29,18 @@ builder.Services.AddControllers();
 builder.Services.AddInfrastructure(builder.Configuration);
 
 // Documentation & OpenApi (Scalar)
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(options =>
+{
+    options.AddDocumentTransformer((document, context, cancellationToken) =>
+    {
+        // On remplace les adresses génériques [::] par localhost
+        document.Servers = new List<OpenApiServer>
+        {
+            new OpenApiServer { Url = "http://localhost:5050" }
+        };
+        return Task.CompletedTask;
+    });
+});
 
 // CORS (Essential for React Dashboard)
 builder.Services.AddCors(options => {
@@ -59,10 +71,18 @@ app.UseAuthorization();
 
 if (app.Environment.IsDevelopment())
 {
-    // Native .NET 9 OpenAPI document
-    app.MapOpenApi();
-    // Modern API UI (Scalar) available at /scalar/v1
-    app.MapScalarApiReference();
+    app.MapOpenApi(); // Génère le fichier openapi.json
+
+    // On configure Scalar pour qu'il pointe vers localhost
+    app.MapScalarApiReference(options =>
+    {
+        options.WithTitle("SRM Oriental Gateway API")
+               .WithTheme(ScalarTheme.Mars)
+               .WithDefaultHttpClient(ScalarTarget.CSharp, ScalarClient.HttpClient);
+
+        // On force l'URL du serveur pour éviter le [::]
+        options.WithPreferredScheme("http");
+    });
 }
 
 // Prometheus Endpoint: Where the scraper collects metrics

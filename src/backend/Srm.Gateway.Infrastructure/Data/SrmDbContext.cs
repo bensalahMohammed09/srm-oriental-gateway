@@ -3,51 +3,66 @@ using Srm.Gateway.Domain.Entities;
 
 namespace Srm.Gateway.Infrastructure.Data;
 
-public class  SrmDbContext(DbContextOptions<SrmDbContext> options) : DbContext(options)
+public class SrmDbContext : DbContext
 {
-    public DbSet<Document> Documents => Set<Document>();
-    public DbSet<User> Users => Set<User>();
-    public DbSet<Role> Roles => Set<Role>();
-    public DbSet<Category> Categories => Set<Category>();
-    public DbSet<Status> Statuses => Set<Status>();
-    public DbSet<Workflow> Workflows => Set<Workflow>();
-    public DbSet<OcrMetadata> OcrMetadatas => Set<OcrMetadata>();
-    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public SrmDbContext(DbContextOptions<SrmDbContext> options) : base(options) { }
+
+    public DbSet<Document> Documents { get; set; }
+    public DbSet<OcrMetadata> Metadata { get; set; }
+    public DbSet<Status> Statuses { get; set; }
+    public DbSet<Category> Categories { get; set; }
+    public DbSet<User> Users { get; set; }
+    public DbSet<Role> Roles { get; set; }
+    public DbSet<Workflow> Workflows { get; set; }
+    public DbSet<AuditLog> AuditLogs { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
-        // Configuration of mapping postgres
+        // --- 1. Mapping des noms de tables (snake_case) ---
+        modelBuilder.Entity<Role>().ToTable("roles");
+        modelBuilder.Entity<User>().ToTable("users");
+        modelBuilder.Entity<Category>().ToTable("categories");
+        modelBuilder.Entity<Status>().ToTable("statuses");
+        modelBuilder.Entity<Document>().ToTable("documents");
+        modelBuilder.Entity<OcrMetadata>().ToTable("ocr_metadata");
+        modelBuilder.Entity<Workflow>().ToTable("workflows");
+        modelBuilder.Entity<AuditLog>().ToTable("audit_logs");
 
+        // --- 2. Configuration des relations (Foreign Keys) ---
+
+        // Document -> Metadata (1:N)
         modelBuilder.Entity<OcrMetadata>()
             .HasOne(m => m.Document)
             .WithMany(d => d.Metadata)
-            .HasForeignKey(m => m.DocumentId);
+            .HasForeignKey(m => m.DocumentId)
+            .OnDelete(DeleteBehavior.Cascade);
 
+        // Document -> Workflow (1:N)
         modelBuilder.Entity<Workflow>()
             .HasOne(w => w.Document)
             .WithMany(d => d.Workflows)
-            .HasForeignKey(w => w.DocumentId);
+            .HasForeignKey(w => w.DocumentId)
+            .OnDelete(DeleteBehavior.Cascade);
 
-        // Configuration User -> Role
+        // User -> Role (N:1)
         modelBuilder.Entity<User>()
             .HasOne(u => u.Role)
             .WithMany(r => r.Users)
             .HasForeignKey(u => u.RoleId)
             .OnDelete(DeleteBehavior.SetNull);
 
-        // Index unique sur la référence du document
+        // --- 3. Index Uniques ---
+
+        // Index unique sur la référence du document (Critique pour éviter les doublons de factures)
         modelBuilder.Entity<Document>()
             .HasIndex(d => d.Reference)
             .IsUnique();
 
-        var entityTpes = modelBuilder.Model.GetEntityTypes();
-        foreach(var entity in entityTpes)
-        {
-            modelBuilder.Entity(entity.ClrType)
-                .Property("CreatedAt")
-                .HasDefaultValueSql("CURRENT_TIMESTAMP");
-        }
+        // Index unique sur les codes pour éviter les doublons techniques
+        modelBuilder.Entity<Status>().HasIndex(s => s.Code).IsUnique();
+        modelBuilder.Entity<Role>().HasIndex(r => r.Code).IsUnique();
     }
+
 }

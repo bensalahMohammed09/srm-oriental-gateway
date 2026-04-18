@@ -48,6 +48,9 @@ pipeline {
                 script {
                     try {
                         sh "docker start sonar-db sonarqube"
+                        
+                        curl -X POST "http://sonarqube:9002/api/system/migrate_db"
+                        
                         sh 'timeout 120s bash -c "until curl -s http://sonarqube:9002/api/system/status | grep -q UP; do sleep 5; done"'
 
                         echo "Running SonarQube analysis for Backend..."

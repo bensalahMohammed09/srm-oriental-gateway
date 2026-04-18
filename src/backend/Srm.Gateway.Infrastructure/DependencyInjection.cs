@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Srm.Gateway.Application.Interfaces;
+using Srm.Gateway.Application.Services;
 using Srm.Gateway.Application.Validators;
 using Srm.Gateway.Infrastructure.Data;
 using Srm.Gateway.Infrastructure.Interceptors;
@@ -38,6 +39,8 @@ namespace Srm.Gateway.Infrastructure
 
             services.AddFluentValidationAutoValidation();
             services.AddValidatorsFromAssemblyContaining<OcrIngestionValidator>();
+
+            services.AddScoped<IDocumentService, DocumentService>();
 
 
             return services;

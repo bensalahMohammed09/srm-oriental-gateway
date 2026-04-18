@@ -316,13 +316,13 @@ services:
         SONAR_JDBC_URL: ${SONAR_JDBC_URL}
     container_name: sonarqube
     environment:
-      - SONAR_WEB_JAVAOPTS=-Xmx512m -Xms512m
-      - SONAR_CE_JAVAOPTS=-Xmx512m -Xms512m
-      - SONAR_SEARCH_JAVAOPTS=-Xmx512m -Xms512m 
+      - SONAR_WEB_JAVA_OPTS=-Xmx1G -Xms1G 
+      - SONAR_CE_JAVA_OPTS=-Xmx1G -Xms1G
+      - SONAR_SEARCH_JAVA_OPTS=-Xmx512m -Xms512m
     deploy:
       resources:
         limits:
-          memory: 2G # SonarQube requires significant RAM for analysis
+          memory: 2G
     ports:
       - "${SONAR_EXTERNAL_PORT}:${SONAR_INTERNAL_PORT}"
     volumes:
