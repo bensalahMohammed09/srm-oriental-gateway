@@ -1,6 +1,7 @@
 -- Enable UUID extension for Guid support
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- we should add WITH TIME ZONE TODO
 -- 1. Roles
 CREATE TABLE roles (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

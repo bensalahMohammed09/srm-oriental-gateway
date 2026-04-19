@@ -45,7 +45,7 @@ services:
     ports:
       - "${API_EXTERNAL_PORT}:${API_INTERNAL_PORT}"
     volumes:
-      - srm_uploads:/app/uploads # Shared folder for invoice PDF storage
+      - ./src/workers/ocr-service/uploads:/app/uploads
     deploy:
       resources:
         limits:
@@ -96,7 +96,10 @@ services:
         WORKER_ENV:    ${WORKER_ENV}
     container_name: srm-ocr-worker
     volumes:
-      - srm_uploads:/home/srm_worker/app/uploads        # Shared folder to read PDFs
+      - ./src/workers/ocr-service/uploads:/home/srm_worker/app/uploads      
+      # 2. LE NOUVEAU : Le volume pour le code en live (Live Reloading)
+      - ./src/workers/ocr-service/tests:/home/srm_worker/app/tests
+      - ./src/workers/ocr-service/main.py:/home/srm_worker/app/main.py
     deploy:
       resources:
         limits:

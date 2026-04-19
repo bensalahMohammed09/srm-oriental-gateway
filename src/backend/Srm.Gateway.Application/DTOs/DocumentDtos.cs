@@ -41,5 +41,12 @@ namespace Srm.Gateway.Application.DTOs
         string? CategoryName,
         DateTime CreatedAt
     );
+    // --- 4. RÉCUPÉRATION (Agent BO -> API) : Saisie manuelle d'un échec ---
+    public record ManualRecoveryRequest(
+        string FileName, // Essentiel pour trouver le fichier sur le disque
+        string Reference,
+        decimal? TotalAmount
+    // Tu peux rajouter CategoryId ou d'autres champs si ton formulaire React les demande
+    );
 
 }
