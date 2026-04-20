@@ -1,4 +1,7 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Prometheus;
 using Scalar.AspNetCore;
@@ -6,14 +9,13 @@ using Serilog;
 using Serilog.Events;
 using Serilog.Formatting.Json;
 using Srm.Gateway.Api.Middlewares;
-using Srm.Gateway.Application.Interfaces;
 using Srm.Gateway.Infrastructure;
 using Srm.Gateway.Infrastructure.Data;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // --- 1. LOGGING CONFIGURATION (SERILOG) ---
-// Configure Serilog to write structured JSON logs to the console for Loki/Promtail
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
     .Enrich.FromLogContext()
@@ -22,18 +24,63 @@ Log.Logger = new LoggerConfiguration()
 
 builder.Host.UseSerilog();
 
-// --- 2. SERVICE COLLECTION (DEPENDENCY INJECTION) ---
+// --- 2. SERVICE COLLECTION ---
 builder.Services.AddControllers();
-
-
 builder.Services.AddInfrastructure(builder.Configuration);
 
-// Documentation & OpenApi (Scalar)
+// A. Identity Bastion
+builder.Services.AddIdentity<IdentityUser, IdentityRole>(options =>
+{
+    options.Password.RequireDigit = true;
+    options.Password.RequiredLength = 12;
+    options.Password.RequireNonAlphanumeric = true;
+    options.Password.RequireUppercase = true;
+    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+    options.Lockout.MaxFailedAccessAttempts = 5;
+})
+.AddEntityFrameworkStores<SrmDbContext>()
+.AddDefaultTokenProviders();
+
+// B. Double Shield (JWT + Cookie)
+var jwtSettings = builder.Configuration.GetSection("JwtSettings");
+var secretKey = jwtSettings["Secret"] ?? "SRM_ORIENTAL_SUPER_SECRET_KEY_2026_DO_NOT_SHARE_BY_MOHAMMED";
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = jwtSettings["Issuer"] ?? "srm-gateway",
+        ValidAudience = jwtSettings["Audience"] ?? "srm-frontend",
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
+        ClockSkew = TimeSpan.Zero
+    };
+
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            context.Token = context.Request.Cookies["SRM_AUTH_TOKEN"];
+            return Task.CompletedTask;
+        }
+    };
+});
+
+builder.Services.AddAuthorization();
+
+// --- TON BLOC OPENAPI (REPRIS À L'IDENTIQUE) ---
 builder.Services.AddOpenApi(options =>
 {
     options.AddDocumentTransformer((document, context, cancellationToken) =>
     {
-        // On remplace les adresses génériques [::] par localhost
         document.Servers = new List<OpenApiServer>
         {
             new OpenApiServer { Url = "http://localhost:5050" }
@@ -42,53 +89,49 @@ builder.Services.AddOpenApi(options =>
     });
 });
 
-// CORS (Essential for React Dashboard)
 builder.Services.AddCors(options => {
-    options.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
+    options.AddDefaultPolicy(p =>
+        p.WithOrigins("http://localhost:3000")
+         .AllowAnyMethod()
+         .AllowAnyHeader()
+         .AllowCredentials());
 });
 
 var app = builder.Build();
 
-// --- 3. MIDDLEWARE PIPELINE ORDER (SRE BEST PRACTICES) ---
+// --- INITIALISATION DU SEEDER ---
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try { await IdentitySeeder.SeedRolesAndAdminAsync(services); }
+    catch (Exception ex) { Log.Error(ex, "Seeding failure"); }
+}
 
-
-
-// B. Monitoring: UseHttpMetrics captures response times and status codes
+// --- 3. MIDDLEWARE PIPELINE ---
 app.UseHttpMetrics();
-
-// A. Global Exception Handler: MUST be first to catch errors from all subsequent layers
 app.UseMiddleware<ExceptionMiddleware>();
-
-// C. Logging: UseSerilogRequestLogging creates a single log entry per request
 app.UseSerilogRequestLogging();
-
-// D. Security & Routing
 app.UseRouting();
+
 app.UseCors();
+app.UseAuthentication();
 app.UseAuthorization();
 
-// --- 4. ENDPOINT MAPPING ---
-
+// --- TON BLOC ENDPOINT MAPPING (REPRIS À L'IDENTIQUE) ---
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi(); // Génère le fichier openapi.json
-
-    // On configure Scalar pour qu'il pointe vers localhost
+    app.MapOpenApi();
     app.MapScalarApiReference(options =>
     {
         options.WithTitle("SRM Oriental Gateway API")
                .WithTheme(ScalarTheme.Mars)
                .WithDefaultHttpClient(ScalarTarget.CSharp, ScalarClient.HttpClient);
 
-        // On force l'URL du serveur pour éviter le [::]
         options.WithPreferredScheme("http");
     });
 }
 
-// Prometheus Endpoint: Where the scraper collects metrics
-app.MapMetrics();
-
-// API Controllers
 app.MapControllers();
+app.MapMetrics();
 
 app.Run();

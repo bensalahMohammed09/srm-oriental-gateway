@@ -98,22 +98,19 @@ public class DocumentController(IDocumentService service) : ControllerBase
         try
         {
             var documentId = await _service.RecoverFailedDocumentAsync(request);
-
-            return Ok(new
-            {
-                message = "Document récupéré et réintégré avec succès.",
-                documentId = documentId
-            });
+            return Ok(new { message = "Document récupéré.", documentId });
+        }
+        catch (InvalidOperationException ex) // <-- Le doublon est attrapé ici !
+        {
+            return BadRequest(new { error = ex.Message });
         }
         catch (FileNotFoundException ex)
         {
-            // Si le fichier n'est pas dans le dossier /failed
             return NotFound(new { error = ex.Message });
         }
-        catch (Exception ex)
+        catch(Exception ex)
         {
-            // Erreur de base de données ou autre
-            return StatusCode(500, new { error = $"Erreur lors de la récupération : {ex.Message}" });
+            return StatusCode(500,ex.Message);
         }
     }
 

@@ -9,7 +9,5 @@ LABEL project="SRM-Oriental-Gateway"
 # DO NOT add USER postgres here; the entrypoint needs root to 
 # initialize permissions before it drops to the postgres user itself.
 
-# Copy the initialization script 
-COPY infra/sql/init.sql /docker-entrypoint-initdb.d/
 
 # The port is handled by PGPORT in the environment variables

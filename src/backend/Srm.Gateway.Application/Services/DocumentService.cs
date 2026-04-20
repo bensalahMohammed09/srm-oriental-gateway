@@ -48,15 +48,45 @@ namespace Srm.Gateway.Application.Services
 
         public async Task ConfirmIndexationAsync(Guid documentId, DocumentValidationRequest request)
         {
-            var document = await _unitOfWork.Documents.GetByIdAsync(documentId);
-            if (document == null) return;
+            // 1. La sécurité Anti-Doublon (On vérifie que la référence n'appartient pas DÉJÀ à une autre facture)
+            var isDuplicate = await _unitOfWork.Documents.AnyAsync(d => d.Reference == request.Reference && d.Id != documentId);
+            if (isDuplicate)
+                throw new InvalidOperationException("Une autre facture utilise déjà cette référence.");
 
+            // 2. Mise à jour du Document principal
+            var document = await _unitOfWork.Documents.GetByIdAsync(documentId)
+                           ?? throw new KeyNotFoundException("Document introuvable.");
+
+            document.CategoryId = request.CategoryId;
             document.Reference = request.Reference;
             document.TotalAmount = request.TotalAmount;
-            document.CategoryId = request.CategoryId;
-            document.UpdatedAt = DateTime.UtcNow;
-            document.StatusId = await GetStatusIdByCode("BUS_PENDING_APPROVAL");
 
+            // Passage au statut "Validation Métier"
+            var statuses = await _unitOfWork.Statuses.GetAllAsync();
+            document.StatusId = statuses.First(s => s.Code == "BUS_PENDING_VAL").Id;
+
+            // 3. Mise à jour des Métadonnées corrigées (La réponse à ta question !)
+            if (request.MetadataCorrections != null && request.MetadataCorrections.Any())
+            {
+                foreach (var correction in request.MetadataCorrections)
+                {
+                    var metaToUpdate = await _unitOfWork.Metadata.GetByIdAsync(correction.Id);
+                    if (metaToUpdate != null)
+                    {
+                        metaToUpdate.Value = correction.Value;
+
+                        // 🛡️ L'empreinte humaine : On force la confiance à 100% car l'agent a vérifié
+                        metaToUpdate.Confidence = 1.0;
+
+                        // On met à jour la date de modification
+                        metaToUpdate.UpdatedAt = DateTime.UtcNow;
+
+                        _unitOfWork.Metadata.Update(metaToUpdate);
+                    }
+                }
+            }
+
+            // 4. On sauvegarde tout dans une seule transaction SQL
             await _unitOfWork.CompleteAsync();
         }
 
@@ -140,6 +170,10 @@ namespace Srm.Gateway.Application.Services
         {
             var failedPath = Path.Combine("/app/uploads/failed", request.FileName);
             var processedPath = Path.Combine("/app/uploads/processed", request.FileName);
+
+            var isDuplicate = await _unitOfWork.Documents.AnyAsync(d => d.Reference == request.Reference);
+            if (isDuplicate)
+                throw new InvalidOperationException($"Une facture avec la référence '{request.Reference}' existe déjà dans le système.");
 
             // 1. Vérifier que le fichier existe bien dans le dossier d'erreur
             if (!File.Exists(failedPath))

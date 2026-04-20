@@ -22,12 +22,6 @@ namespace Srm.Gateway.Infrastructure.Repositories
         private IBaseRepository<Workflow>? _workflows;
         public IBaseRepository<Workflow> Workflows => _workflows ??= new BaseRepository<Workflow>(_context);
 
-        private IBaseRepository<User>? _users;
-        public IBaseRepository<User> Users => _users ??= new BaseRepository<User>(_context);
-
-        private IBaseRepository<Role>? _roles;
-        public IBaseRepository<Role> Roles => _roles ??= new BaseRepository<Role>(_context);
-
         private IBaseRepository<Category>? _categories;
         public IBaseRepository<Category> Categories => _categories ??= new BaseRepository<Category>(_context);
 

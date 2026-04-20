@@ -11,8 +11,6 @@ namespace Srm.Gateway.Application.Interfaces
         IBaseRepository<Domain.Entities.Document> Documents { get; }
         IBaseRepository<Domain.Entities.OcrMetadata> Metadata { get; }
         IBaseRepository<Domain.Entities.Workflow> Workflows { get; }
-        IBaseRepository<Domain.Entities.User> Users { get; }
-        IBaseRepository<Domain.Entities.Role> Roles { get; }
         IBaseRepository<Domain.Entities.Category> Categories { get; }
         IBaseRepository<Domain.Entities.Status> Statuses { get; }
         IBaseRepository<Domain.Entities.AuditLog> AuditLogs { get; }
