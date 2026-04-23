@@ -152,4 +152,27 @@ public class DocumentController(IDocumentService service) : ControllerBase
             return StatusCode(500, new { error = $"Erreur lors de la récupération du fichier en échec : {ex.Message}" });
         }
     }
+
+
+    [HttpPost("manual-upload")] // <-- Change le nom de la route ici !
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> ManualUpload([FromForm] ManualUploadRequest request)
+    {
+        var documentId = await _service.CreateManualDocumentAsync(request);
+        return Ok(new { id = documentId, message = "Document créé manuellement avec succès." });
+    }
+    [HttpGet("{id}/view")]
+    public async Task<IActionResult> ViewFile(Guid id)
+    {
+        var fileDto = await _service.GetFileForViewAsync(id);
+        return File(fileDto.Stream, fileDto.ContentType, enableRangeProcessing: true);
+    }
+
+    [HttpGet("search")]
+    public async Task<IActionResult> Search([FromQuery] string? query, [FromQuery] string? status)
+    {
+        var results = await _service.SearchDocumentsAsync(query, status);
+        return Ok(results);
+    }
+
 }

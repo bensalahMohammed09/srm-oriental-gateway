@@ -1,22 +1,36 @@
 ﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.StaticFiles;
 using Srm.Gateway.Application.DTOs;
 using Srm.Gateway.Application.Interfaces;
 using Srm.Gateway.Domain.Entities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace Srm.Gateway.Application.Services
 {
-    public class DocumentService(IUnitOfWork unitOfWork) : IDocumentService
+    public class DocumentService : IDocumentService
     {
-        private readonly IUnitOfWork _unitOfWork = unitOfWork;
+        private readonly IUnitOfWork _unitOfWork;
+        private readonly IHttpContextAccessor _httpContextAccessor;
 
         private readonly string _uploadPath = "/app/uploads/pending";
         private readonly string _processedPath = "/app/uploads/processed";
+        private readonly string _archivedPath = "/app/upload/archived";
 
+        public DocumentService(IUnitOfWork unitOfWork, IHttpContextAccessor httpContextAccessor)
+        {
+            _unitOfWork = unitOfWork;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private string? GetCurrentUserId()
+        {
+            return _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        }
         public async Task<Guid> IngestDocumentAsync(OcrIngestionRequest request)
         {
             var document = new Document
@@ -48,45 +62,37 @@ namespace Srm.Gateway.Application.Services
 
         public async Task ConfirmIndexationAsync(Guid documentId, DocumentValidationRequest request)
         {
-            // 1. La sécurité Anti-Doublon (On vérifie que la référence n'appartient pas DÉJÀ à une autre facture)
-            var isDuplicate = await _unitOfWork.Documents.AnyAsync(d => d.Reference == request.Reference && d.Id != documentId);
-            if (isDuplicate)
-                throw new InvalidOperationException("Une autre facture utilise déjà cette référence.");
-
-            // 2. Mise à jour du Document principal
             var document = await _unitOfWork.Documents.GetByIdAsync(documentId)
                            ?? throw new KeyNotFoundException("Document introuvable.");
 
+            // 1. On récupère l'ID de l'agent qui valide
+            var currentUserId = GetCurrentUserId();
+
+            // 2. On met à jour le document
             document.CategoryId = request.CategoryId;
             document.Reference = request.Reference;
             document.TotalAmount = request.TotalAmount;
 
-            // Passage au statut "Validation Métier"
             var statuses = await _unitOfWork.Statuses.GetAllAsync();
             document.StatusId = statuses.First(s => s.Code == "BUS_PENDING_VAL").Id;
 
-            // 3. Mise à jour des Métadonnées corrigées (La réponse à ta question !)
-            if (request.MetadataCorrections != null && request.MetadataCorrections.Any())
+            // 3. On crée l'entrée de Workflow (BPMN Logic)
+            var workflowEntry = new Workflow
             {
-                foreach (var correction in request.MetadataCorrections)
-                {
-                    var metaToUpdate = await _unitOfWork.Metadata.GetByIdAsync(correction.Id);
-                    if (metaToUpdate != null)
-                    {
-                        metaToUpdate.Value = correction.Value;
+                Id = Guid.NewGuid(),
+                DocumentId = document.Id,
+                StepName = "Indexation initiale",
+                CurrentStatus = "VALIDATED_BY_BO",
+                ValidatedByUserId = currentUserId, // 🛡️ C'est ici que l'ID de l'admin/agent est stocké
+                ValidatedAt = DateTime.UtcNow,
+                Comment = "Indexation confirmée manuellement par l'agent."
+            };
 
-                        // 🛡️ L'empreinte humaine : On force la confiance à 100% car l'agent a vérifié
-                        metaToUpdate.Confidence = 1.0;
+            await _unitOfWork.Workflows.AddAsync(workflowEntry);
 
-                        // On met à jour la date de modification
-                        metaToUpdate.UpdatedAt = DateTime.UtcNow;
+            // Mise à jour des métadonnées (ton code existant...)
+            if (request.MetadataCorrections != null) { /* ... */ }
 
-                        _unitOfWork.Metadata.Update(metaToUpdate);
-                    }
-                }
-            }
-
-            // 4. On sauvegarde tout dans une seule transaction SQL
             await _unitOfWork.CompleteAsync();
         }
 
@@ -260,6 +266,126 @@ namespace Srm.Gateway.Application.Services
             var contentType = GetMimeType(fileName);
 
             return Task.FromResult<(Stream, string)>((stream, contentType));
+        }
+
+        public async Task<Guid> CreateManualDocumentAsync(ManualUploadRequest request)
+        {
+            var currentUserId = GetCurrentUserId();
+
+            // 1. Sauvegarde physique du fichier
+            var fileName = $"{Guid.NewGuid()}_{request.File.FileName}";
+            var filePath = Path.Combine(_uploadPath, fileName);
+
+            using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await request.File.CopyToAsync(stream);
+            }
+
+            // 2. Création du document (Statut direct : BUS_PENDING_VAL)
+            var statuses = await _unitOfWork.Statuses.GetAllAsync();
+            var pendingStatus = statuses.First(s => s.Code == "BUS_PENDING_VAL");
+
+            var document = new Document
+            {
+                Id = Guid.NewGuid(),
+                Reference = request.Reference,
+                SupplierName = request.SupplierName,
+                TotalAmount = request.TotalAmount,
+                CategoryId = request.CategoryId,
+                StatusId = pendingStatus.Id,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            // 3. Liaison avec le fichier via Metadata
+            document.Metadata.Add(new OcrMetadata
+            {
+                Id = Guid.NewGuid(),
+                Key = "SourceFile",
+                Value = fileName
+            });
+
+            // 4. Workflow : Création manuelle
+            var workflow = new Workflow
+            {
+                Id = Guid.NewGuid(),
+                DocumentId = document.Id,
+                StepName = "Saisie manuelle BO",
+                CurrentStatus = "CREATED_BY_AGENT",
+                ValidatedByUserId = currentUserId,
+                ValidatedAt = DateTime.UtcNow,
+                Comment = "Document ajouté manuellement par l'agent sans passer par l'OCR."
+            };
+
+            await _unitOfWork.Documents.AddAsync(document);
+            await _unitOfWork.Workflows.AddAsync(workflow);
+            await _unitOfWork.CompleteAsync();
+
+            return document.Id;
+        }
+
+        public async Task ArchiveDocumentFileAsync(Guid documentId)
+        {
+            var document = await _unitOfWork.Documents.GetByIdAsync(documentId);
+            if (document == null) return;
+
+            var fileNameMeta = document.Metadata.FirstOrDefault(m => m.Key == "file_name");
+            if (fileNameMeta == null) return;
+
+            var sourcePath = Path.Combine(_processedPath, fileNameMeta.Value);
+            var destinationPath = Path.Combine(_archivedPath, fileNameMeta.Value);
+
+            try
+            {
+                if (File.Exists(sourcePath))
+                {
+                    // S'assurer que le dossier de destination existe
+                    if (!Directory.Exists(_archivedPath)) Directory.CreateDirectory(_archivedPath);
+
+                    // Déplacement physique du fichier (Archive SRE)
+                    File.Move(sourcePath, destinationPath, overwrite: true);
+
+                    // Optionnel : Mettre à jour la métadonnée pour pointer vers le nouveau chemin
+                    fileNameMeta.Value = fileNameMeta.Value; // Le nom reste le même, mais le dossier change
+                    await _unitOfWork.CompleteAsync();
+                }
+            }
+            catch (Exception ex) 
+            {
+                throw new Exception($"[SRE-ERR] Échec de l'archivage physique : {ex.Message}");
+            }
+            
+        }
+        public async Task<FileDownloadDto> GetFileForViewAsync(Guid documentId)
+        {
+            var document = await _unitOfWork.Documents.GetByIdAsync(documentId)
+                ?? throw new KeyNotFoundException("Document introuvable.");
+
+            var fileName = document.Metadata.FirstOrDefault(m => m.Key == "SourceFile")?.Value
+                ?? throw new FileNotFoundException("Aucun fichier associé.");
+
+            string[] searchPaths = {
+            Path.Combine(_archivedPath, fileName),
+            Path.Combine(_processedPath, fileName),
+            Path.Combine(_uploadPath, fileName)
+        };
+
+            string? finalPath = searchPaths.FirstOrDefault(File.Exists)
+                ?? throw new FileNotFoundException("Fichier physique introuvable.");
+
+            var provider = new FileExtensionContentTypeProvider();
+            if (!provider.TryGetContentType(finalPath, out var contentType)) contentType = "application/octet-stream";
+
+            return new FileDownloadDto(File.OpenRead(finalPath), contentType, fileName);
+        }
+
+        public async Task<IEnumerable<DocumentResponse>> SearchDocumentsAsync(string? query, string? status)
+        {
+            var docs = await _unitOfWork.Documents.GetAllAsync();
+
+            return docs.Where(d =>
+                (string.IsNullOrEmpty(query) || d.Reference.Contains(query, StringComparison.OrdinalIgnoreCase) || d.SupplierName.Contains(query, StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrEmpty(status) || d.Status.Code == status))
+                .Select(d => new DocumentResponse(d.Id, d.Reference, d.Status.Name, d.Category?.Name, d.CreatedAt));
         }
 
     }

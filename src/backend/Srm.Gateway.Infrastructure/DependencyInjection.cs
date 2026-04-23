@@ -19,10 +19,13 @@ namespace Srm.Gateway.Infrastructure
 {
     public static class DependencyInjection
     {
-         public static IServiceCollection AddInfrastructure(this IServiceCollection services,IConfiguration configuration)
-         {
+        public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
+        {
+            services.AddHttpContextAccessor();
 
-            services.AddSingleton<AuditInterceptor>();
+            services.AddScoped<AuditInterceptor>();
+
+
             // Database Configuration
             var connectionString = configuration.GetConnectionString("DefaultConnection");
             services.AddDbContext<SrmDbContext>((sp, options) =>
@@ -32,7 +35,7 @@ namespace Srm.Gateway.Infrastructure
                        .UseSnakeCaseNamingConvention() // Map C# PascalCase to Postgres snake_case
                        .AddInterceptors(auditInterceptor);
             });
-           
+
             services.AddScoped(typeof(IBaseRepository<>), typeof(BaseRepository<>));
 
             services.AddScoped<IUnitOfWork, UnitOfWork>();
@@ -41,9 +44,13 @@ namespace Srm.Gateway.Infrastructure
             services.AddValidatorsFromAssemblyContaining<OcrIngestionValidator>();
 
             services.AddScoped<IDocumentService, DocumentService>();
+            services.AddScoped<IWorkflowService, WorkflowService>();
+            services.AddScoped<IAuthService, AuthService>();
 
+            // 🚀 LA PIÈCE MANQUANTE : On enregistre le ProfileService !
+            services.AddScoped<IProfileService, ProfileService>();
 
             return services;
-         } 
+        }
     }
 }

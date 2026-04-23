@@ -1,18 +1,21 @@
-﻿using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.ChangeTracking;
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Srm.Gateway.Domain.Entities;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+using System.Security.Claims;
 using System.Text.Json;
-using System.Threading.Tasks;
 
 namespace Srm.Gateway.Infrastructure.Interceptors
 {
     public class AuditInterceptor : SaveChangesInterceptor
     {
+        private readonly IHttpContextAccessor _httpContextAccessor;
+
+        public AuditInterceptor(IHttpContextAccessor httpContextAccessor)
+        {
+            _httpContextAccessor = httpContextAccessor;
+        }
+
         public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
             DbContextEventData eventData,
             InterceptionResult<int> result,
@@ -21,7 +24,15 @@ namespace Srm.Gateway.Infrastructure.Interceptors
             var context = eventData.Context;
             if (context == null) return base.SavingChangesAsync(eventData, result, cancellationToken);
 
-            // 🟢 LA CORRECTION : .ToList() pour éviter "Collection was modified"
+            // 🟢 RÉPARATION DU TYPAGE : Extraction et tentative de parsing en Guid
+            var userIdClaim = _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            Guid? currentUserId = null;
+
+            if (Guid.TryParse(userIdClaim, out var parsedGuid))
+            {
+                currentUserId = parsedGuid;
+            }
+
             var entries = context.ChangeTracker.Entries()
                 .Where(e => e.Entity is not AuditLog &&
                            (e.State == EntityState.Added || e.State == EntityState.Modified || e.State == EntityState.Deleted))
@@ -29,14 +40,24 @@ namespace Srm.Gateway.Infrastructure.Interceptors
 
             foreach (var entry in entries)
             {
+                // ✅ RÉPARATION CRITIQUE : Récupération dynamique et sécurisée de la clé primaire (simple ou composite)
+                var pk = entry.Metadata.FindPrimaryKey();
+                var entityId = "Unknown";
+
+                if (pk != null)
+                {
+                    var pkValues = pk.Properties.Select(p => entry.Property(p.Name).CurrentValue?.ToString());
+                    entityId = string.Join("-", pkValues);
+                }
+
                 var auditLog = new AuditLog
                 {
                     Id = Guid.NewGuid(),
                     EntityName = entry.Entity.GetType().Name,
-                    EntityId = entry.Property("Id").CurrentValue?.ToString() ?? "Unknown",
+                    EntityId = entityId,
                     Action = entry.State.ToString(),
                     CreatedAt = DateTime.UtcNow,
-                    UserId = Guid.Empty, // À remplacer par l'ID de l'utilisateur plus tard
+                    UserId = currentUserId,
                     Changes = SerializeChanges(entry)
                 };
 
@@ -49,6 +70,7 @@ namespace Srm.Gateway.Infrastructure.Interceptors
         private string SerializeChanges(Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry entry)
         {
             var changes = new Dictionary<string, object?>();
+            var options = new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
             if (entry.State == EntityState.Added)
             {
@@ -71,7 +93,7 @@ namespace Srm.Gateway.Infrastructure.Interceptors
                 }
             }
 
-            return JsonSerializer.Serialize(changes);
+            return JsonSerializer.Serialize(changes, options);
         }
     }
 }

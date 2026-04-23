@@ -34,5 +34,12 @@ namespace Srm.Gateway.Application.Interfaces
         Task<IEnumerable<object>> GetFailedFilesAsync();
 
         Task<(Stream stream, string contentType)> GetFailedDocumentFileAsync(string fileName);
+
+        Task<Guid> CreateManualDocumentAsync(ManualUploadRequest request);
+
+        Task ArchiveDocumentFileAsync(Guid documentId);
+
+        Task<FileDownloadDto> GetFileForViewAsync(Guid documentId);
+        Task<IEnumerable<DocumentResponse>> SearchDocumentsAsync(string? query, string? status);
     }
 }

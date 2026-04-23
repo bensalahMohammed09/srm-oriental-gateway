@@ -12,8 +12,8 @@ using Srm.Gateway.Infrastructure.Data;
 namespace Srm.Gateway.Infrastructure.Migrations
 {
     [DbContext(typeof(SrmDbContext))]
-    [Migration("20260419173457_InitIdentity")]
-    partial class InitIdentity
+    [Migration("20260421175809_InitialIdentitySetup")]
+    partial class InitialIdentitySetup
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

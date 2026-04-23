@@ -1,19 +1,25 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <ItemGroup>
-    <ProjectReference Include="..\Srm.Gateway.Domain\Srm.Gateway.Domain.csproj" />
-  </ItemGroup>
+	<PropertyGroup>
+		<TargetFramework>net9.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="FluentValidation" Version="12.1.1" />
-    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
-    <PackageReference Include="Microsoft.AspNetCore.Http" Version="2.3.9" />
-  </ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\Srm.Gateway.Domain\Srm.Gateway.Domain.csproj" />
+	</ItemGroup>
 
-  <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
+	<ItemGroup>
+		<PackageReference Include="FluentValidation" Version="12.1.1" />
+		<PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
+		<PackageReference Include="Microsoft.AspNetCore.Http" Version="2.3.9" />
+		<PackageReference Include="Microsoft.AspNetCore.StaticFiles" Version="2.3.9" />
+
+		<!-- 🛡️ ALIGNEMENT SRE : Exactement les mêmes versions que l'API -->
+		<PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.6.0" />
+		<PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.6.0" />
+		<PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.6.0" />
+	</ItemGroup>
 
 </Project>

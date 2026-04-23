@@ -3,7 +3,6 @@ using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace Srm.Gateway.Infrastructure.Data
@@ -15,7 +14,6 @@ namespace Srm.Gateway.Infrastructure.Data
             var roleManager = serviceProvider.GetRequiredService<RoleManager<IdentityRole>>();
             var userManager = serviceProvider.GetRequiredService<UserManager<IdentityUser>>();
 
-            // 1. Rôles BPMN SRM
             string[] roles = { "ROLE_ADMIN", "ROLE_BO", "ROLE_FINANCE", "ROLE_TECH" };
 
             foreach (var roleName in roles)
@@ -26,24 +24,57 @@ namespace Srm.Gateway.Infrastructure.Data
                 }
             }
 
-            // 2. Administrateur Racine
-            var adminEmail = "admin@srm.ma";
-            var adminUser = await userManager.FindByEmailAsync(adminEmail);
-
-            if (adminUser == null)
+            var testUsers = new Dictionary<string, string>
             {
-                var newAdmin = new IdentityUser
-                {
-                    UserName = adminEmail,
-                    Email = adminEmail,
-                    EmailConfirmed = true
-                };
+                { "admin@srm.ma", "ROLE_ADMIN" },
+                { "bo@srm.ma", "ROLE_BO" },
+                { "finance@srm.ma", "ROLE_FINANCE" },
+                { "tech@srm.ma", "ROLE_TECH" }
+            };
 
-                // Respecte la politique de 12 caractères
-                var result = await userManager.CreateAsync(newAdmin, "Srm_Admin_2026!");
-                if (result.Succeeded)
+            var defaultPassword = "Srm_Test_2026!";
+
+            foreach (var userKvp in testUsers)
+            {
+                var email = userKvp.Key;
+                var role = userKvp.Value;
+
+                var user = await userManager.FindByEmailAsync(email);
+
+                if (user == null)
                 {
-                    await userManager.AddToRoleAsync(newAdmin, "ROLE_ADMIN");
+                    var newUser = new IdentityUser
+                    {
+                        UserName = email,
+                        Email = email,
+                        EmailConfirmed = true
+                    };
+
+                    var result = await userManager.CreateAsync(newUser, defaultPassword);
+
+                    if (result.Succeeded)
+                    {
+                        var roleResult = await userManager.AddToRoleAsync(newUser, role);
+                        if (!roleResult.Succeeded)
+                        {
+                            var errors = string.Join(", ", roleResult.Errors.Select(e => e.Description));
+                            throw new Exception($"[SEEDER FATAL] User created but failed to assign role {role} to {email}: {errors}");
+                        }
+                    }
+                    else
+                    {
+                        // 💥 WE NOW THROW AN EXCEPTION SO YOU CAN SEE THE EXACT MICROSOFT IDENTITY ERROR
+                        var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                        throw new Exception($"[SEEDER FATAL] Failed to create user {email}. Reasons: {errors}");
+                    }
+                }
+                else
+                {
+                    var currentRoles = await userManager.GetRolesAsync(user);
+                    if (!currentRoles.Contains(role))
+                    {
+                        await userManager.AddToRoleAsync(user, role);
+                    }
                 }
             }
         }

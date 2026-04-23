@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -11,6 +11,8 @@ using Serilog.Formatting.Json;
 using Srm.Gateway.Api.Middlewares;
 using Srm.Gateway.Infrastructure;
 using Srm.Gateway.Infrastructure.Data;
+using Srm.Gateway.Application.Services;
+using Srm.Gateway.Application.Interfaces;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -26,7 +28,9 @@ builder.Host.UseSerilog();
 
 // --- 2. SERVICE COLLECTION ---
 builder.Services.AddControllers();
+
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddScoped<IDocumentService, DocumentService>();
 
 // A. Identity Bastion
 builder.Services.AddIdentity<IdentityUser, IdentityRole>(options =>
@@ -49,6 +53,8 @@ builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
     options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    // 🛡️ CORRECTION .NET 9 : Obligatoire pour écraser le cookie Identity par défaut
+    options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
 })
 .AddJwtBearer(options =>
 {
@@ -61,14 +67,39 @@ builder.Services.AddAuthentication(options =>
         ValidIssuer = jwtSettings["Issuer"] ?? "srm-gateway",
         ValidAudience = jwtSettings["Audience"] ?? "srm-frontend",
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
-        ClockSkew = TimeSpan.Zero
+        ClockSkew = TimeSpan.FromMinutes(1)
     };
 
+    // 🚀 AJOUT SRE : Logging de diagnostic détaillé pour comprendre les 401
     options.Events = new JwtBearerEvents
     {
         OnMessageReceived = context =>
         {
-            context.Token = context.Request.Cookies["SRM_AUTH_TOKEN"];
+            Console.WriteLine("[DEBUG-AUTH] Requête reçue sur : " + context.Request.Path);
+            if (context.Request.Cookies.TryGetValue("SRM_AUTH_TOKEN", out var token))
+            {
+                Console.WriteLine("[DEBUG-AUTH] Cookie 'SRM_AUTH_TOKEN' TROUVÉ ! Longueur : " + token.Length);
+                context.Token = token;
+            }
+            else
+            {
+                Console.WriteLine("[DEBUG-AUTH] ❌ AUCUN Cookie 'SRM_AUTH_TOKEN' trouvé dans la requête !");
+            }
+            return Task.CompletedTask;
+        },
+        OnAuthenticationFailed = context =>
+        {
+            Console.WriteLine("[DEBUG-AUTH] ❌ ÉCHEC DE L'AUTHENTIFICATION : " + context.Exception.Message);
+            return Task.CompletedTask;
+        },
+        OnTokenValidated = context =>
+        {
+            Console.WriteLine("[DEBUG-AUTH] ✅ TOKEN VALIDÉ AVEC SUCCÈS pour : " + context.Principal?.Identity?.Name);
+            return Task.CompletedTask;
+        },
+        OnChallenge = context =>
+        {
+            Console.WriteLine("[DEBUG-AUTH] ⚠️ 401 CHALLENGE DÉCLENCHÉ : La requête a été rejetée. Raison : " + context.Error + " - " + context.ErrorDescription);
             return Task.CompletedTask;
         }
     };
@@ -76,7 +107,13 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization();
 
-// --- TON BLOC OPENAPI (REPRIS � L'IDENTIQUE) ---
+// 🛡️ CORRECTION SRE : Nginx unifie les ports, on utilise Lax, et on enlève les restrictions "None"
+builder.Services.Configure<CookiePolicyOptions>(options =>
+{
+    options.MinimumSameSitePolicy = SameSiteMode.Lax;
+    options.Secure = CookieSecurePolicy.SameAsRequest;
+});
+
 builder.Services.AddOpenApi(options =>
 {
     options.AddDocumentTransformer((document, context, cancellationToken) =>
@@ -89,35 +126,41 @@ builder.Services.AddOpenApi(options =>
     });
 });
 
-builder.Services.AddCors(options => {
-    options.AddDefaultPolicy(p =>
-        p.WithOrigins("http://localhost:3000")
-         .AllowAnyMethod()
-         .AllowAnyHeader()
-         .AllowCredentials());
-});
+// ❌ Nginx s'occupe du reverse proxy. Le bloc AddCors a été SUPPRIMÉ.
 
 var app = builder.Build();
 
-// --- INITIALISATION DU SEEDER ---
+// --- 3. INITIALISATION DES SEEDERS ---
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
-    try { await IdentitySeeder.SeedRolesAndAdminAsync(services); }
-    catch (Exception ex) { Log.Error(ex, "Seeding failure"); }
+    var context = services.GetRequiredService<SrmDbContext>();
+
+    try
+    {
+        await DataSeeder.SeedLookupDataAsync(context);
+        await IdentitySeeder.SeedRolesAndAdminAsync(services);
+        Log.Information("Initial seeding completed successfully.");
+    }
+    catch (Exception ex)
+    {
+        Log.Error(ex, "Initial seeding failed.");
+    }
 }
 
-// --- 3. MIDDLEWARE PIPELINE ---
+// --- 4. MIDDLEWARE PIPELINE ---
 app.UseHttpMetrics();
 app.UseMiddleware<ExceptionMiddleware>();
 app.UseSerilogRequestLogging();
 app.UseRouting();
 
-app.UseCors();
+// ❌ app.UseCors() a été SUPPRIMÉ.
+
+app.UseCookiePolicy();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
-// --- TON BLOC ENDPOINT MAPPING (REPRIS � L'IDENTIQUE) ---
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -135,3 +178,5 @@ app.MapControllers();
 app.MapMetrics();
 
 app.Run();
+
+public partial class Program { }

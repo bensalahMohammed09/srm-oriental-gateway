@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.AspNetCore.Http;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -48,5 +49,38 @@ namespace Srm.Gateway.Application.DTOs
         decimal? TotalAmount
     // Tu peux rajouter CategoryId ou d'autres champs si ton formulaire React les demande
     );
+
+    public class ManualUploadRequest
+    {
+        public IFormFile File { get; set; } = null!;
+        public string Reference { get; set; } = string.Empty;
+        public string SupplierName { get; set; } = string.Empty;
+        public decimal TotalAmount { get; set; }
+        public Guid CategoryId { get; set; }
+    }
+
+    public record FileDownloadDto(Stream Stream, string ContentType, string FileName);
+
+    public record UserProfileDto(
+    string Id,
+    string Email,
+    string UserName,
+    IList<string> Roles,
+    DateTime ServerTime
+);
+
+    public record DashboardStatsDto(
+        int TotalDocuments,
+        int PendingValidation,
+        decimal ApprovedAmount,
+        int RejectedCount,
+        IEnumerable<CategoryDistributionDto> Distribution,
+        IEnumerable<RecentActivityDto> RecentActivity
+    );
+
+    public record CategoryDistributionDto(string Name, int Value);
+    public record RecentActivityDto(string Reference, string SupplierName, string Status, DateTime Date);
+
+    public record WorkflowActionRequest(string? Comment);
 
 }
