@@ -9,7 +9,6 @@ namespace Srm.Gateway.Application.Interfaces
     public interface IUnitOfWork : IDisposable
     {
         IBaseRepository<Domain.Entities.Document> Documents { get; }
-        IBaseRepository<Domain.Entities.OcrMetadata> Metadata { get; }
         IBaseRepository<Domain.Entities.Workflow> Workflows { get; }
         IBaseRepository<Domain.Entities.Category> Categories { get; }
         IBaseRepository<Domain.Entities.Status> Statuses { get; }
