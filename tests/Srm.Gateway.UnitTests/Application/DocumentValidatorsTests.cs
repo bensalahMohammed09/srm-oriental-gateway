@@ -25,16 +25,12 @@ public class DocumentValidatorsTests
     [Fact]
     public void OcrIngestionValidator_ShouldNotHaveError_WhenRequestIsValid()
     {
-        // Arrange
-        var request = new OcrIngestionRequest(
-            Reference: "INV-VALID-001",
-            SupplierName: "Supplier Test",
-            TotalAmount: 1000m,
-            Metadata: new List<OcrMetadataInputDto>
-            {
-                new OcrMetadataInputDto("TVA", "20%", 0.99)
-            }
-        );
+        // Arrange : Utilisation du nouveau Record MetadataDto
+        var metadata = new List<MetadataDto>
+        {
+            new MetadataDto("TVA", "20%", 0.99)
+        };
+        var request = new OcrIngestionRequest("INV-VALID-001", "Supplier Test", 1000m, metadata);
 
         // Act
         var result = _ocrValidator.TestValidate(request);
@@ -47,12 +43,7 @@ public class DocumentValidatorsTests
     public void OcrIngestionValidator_ShouldHaveError_WhenReferenceIsEmpty()
     {
         // Arrange
-        var request = new OcrIngestionRequest(
-            Reference: "", // ❌ Référence vide (doit déclencher une erreur)
-            SupplierName: "Supplier Test",
-            TotalAmount: 1000m,
-            Metadata: new List<OcrMetadataInputDto>()
-        );
+        var request = new OcrIngestionRequest("", "Supplier Test", 1000m, new List<MetadataDto>());
 
         // Act
         var result = _ocrValidator.TestValidate(request);
@@ -64,25 +55,27 @@ public class DocumentValidatorsTests
     // --- Tests pour DocumentValidationValidator (Agent BO) ---
 
     [Fact]
-    public void AgentValidator_ShouldHaveError_WhenMetadataCorrectionIsMissingId()
+    public void AgentValidator_ShouldHaveError_WhenMetadataCorrectionKeyIsEmpty()
     {
-        // Arrange
+        // Arrange : On utilise maintenant un Dictionary !
+        var corrections = new Dictionary<string, string>
+        {
+            // ❌ La clé est vide, ce qui est interdit par meta.RuleFor(m => m.Key).NotEmpty()
+            { "", "Nouvelle Valeur" }
+        };
+
         var request = new DocumentValidationRequest(
             CategoryId: Guid.NewGuid(),
             Reference: "CORRECTED-REF",
             TotalAmount: 1500m,
-            MetadataCorrections: new List<OcrMetadataUpdateDto>
-            {
-                // ❌ L'ID est manquant (Empty Guid), ce qui est interdit par ta règle
-                new OcrMetadataUpdateDto(Guid.Empty, "Nouvelle Valeur")
-            }
+            MetadataCorrections: corrections
         );
 
         // Act
         var result = _agentValidator.TestValidate(request);
 
-        // Assert
-        result.ShouldHaveValidationErrorFor("MetadataCorrections[0].Id")
-              .WithErrorMessage("L'ID de la métadonnée est requis pour la correction.");
+        // Assert : FluentValidation cible l'index [0] du dictionnaire et sa propriété "Key"
+        result.ShouldHaveValidationErrorFor("MetadataCorrections[0].Key")
+              .WithErrorMessage("La clé de la métadonnée est requise pour la correction.");
     }
 }

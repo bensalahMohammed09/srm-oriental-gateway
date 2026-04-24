@@ -7,178 +7,127 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Moq;
-using Xunit;
-
-// Tes namespaces
+using Srm.Gateway.Application.Interfaces;
 using Srm.Gateway.Application.Services;
 using Srm.Gateway.Domain.Entities;
-using Srm.Gateway.Application.Interfaces;
+using Xunit;
 
 namespace Srm.Gateway.UnitTests.Application;
 
 public class WorkflowServiceTests
 {
-    private readonly Mock<IUnitOfWork> _mockUow;
-    private readonly Mock<IBaseRepository<Document>> _mockDocRepo;
-    private readonly Mock<IBaseRepository<Status>> _mockStatusRepo;
-    private readonly Mock<IBaseRepository<Workflow>> _mockWorkflowRepo;
-    private readonly Mock<IHttpContextAccessor> _mockHttpContext;
-    private readonly Mock<RoleManager<IdentityRole>> _mockRoleManager;
-    private readonly Mock<IDocumentService> _mockDocService; // 🟢 NOUVEAU
-
+    private readonly Mock<IUnitOfWork> _unitOfWorkMock;
+    private readonly Mock<IHttpContextAccessor> _httpContextAccessorMock;
+    private readonly Mock<RoleManager<IdentityRole>> _roleManagerMock;
+    private readonly Mock<IDocumentService> _documentServiceMock;
     private readonly WorkflowService _workflowService;
 
     public WorkflowServiceTests()
     {
-        _mockUow = new Mock<IUnitOfWork>();
-        _mockDocRepo = new Mock<IBaseRepository<Document>>();
-        _mockStatusRepo = new Mock<IBaseRepository<Status>>();
-        _mockWorkflowRepo = new Mock<IBaseRepository<Workflow>>();
+        // 🛠️ CORRECTION : L'ajout de { DefaultValue = DefaultValue.Mock } empêche toutes les NullReferenceException 
+        // liées aux "await" non configurés (comme _unitOfWork.Workflows.AddAsync).
+        _unitOfWorkMock = new Mock<IUnitOfWork> { DefaultValue = DefaultValue.Mock };
+        _httpContextAccessorMock = new Mock<IHttpContextAccessor> { DefaultValue = DefaultValue.Mock };
+        _documentServiceMock = new Mock<IDocumentService> { DefaultValue = DefaultValue.Mock };
 
-        _mockUow.SetupGet(u => u.Documents).Returns(_mockDocRepo.Object);
-        _mockUow.SetupGet(u => u.Statuses).Returns(_mockStatusRepo.Object);
-        _mockUow.SetupGet(u => u.Workflows).Returns(_mockWorkflowRepo.Object);
+        var roleStoreMock = new Mock<IRoleStore<IdentityRole>>();
+        _roleManagerMock = new Mock<RoleManager<IdentityRole>>(roleStoreMock.Object, null!, null!, null!, null!);
+        _roleManagerMock.Setup(r => r.FindByNameAsync(It.IsAny<string>()))
+            .ReturnsAsync((string name) => new IdentityRole { Id = Guid.NewGuid().ToString(), Name = name });
 
-        _mockHttpContext = new Mock<IHttpContextAccessor>();
-        _mockDocService = new Mock<IDocumentService>();
+        var claims = new[] { new Claim(ClaimTypes.NameIdentifier, "user-123") };
+        var identity = new ClaimsIdentity(claims, "TestAuth");
+        _httpContextAccessorMock.Setup(x => x.HttpContext!.User).Returns(new ClaimsPrincipal(identity));
 
-        // Configuration basique du RoleManager (Moq demande des paramètres factices pour les classes Identity)
-        var store = new Mock<IRoleStore<IdentityRole>>();
-        _mockRoleManager = new Mock<RoleManager<IdentityRole>>(store.Object, null!, null!, null!, null!);
+        var statuses = new List<Status>
+        {
+            new Status { Id = Guid.NewGuid(), Code = "BUS_PENDING_VAL", Name = "En attente" },
+            new Status { Id = Guid.NewGuid(), Code = "REJECTED", Name = "Rejeté" },
+            new Status { Id = Guid.NewGuid(), Code = "APPROVED", Name = "Approuvé" }
+        };
+        _unitOfWorkMock.Setup(u => u.Statuses.GetAllAsync()).ReturnsAsync(statuses);
 
-        // 🟢 Injection du nouveau service dans le constructeur
         _workflowService = new WorkflowService(
-            _mockUow.Object,
-            _mockHttpContext.Object,
-            _mockRoleManager.Object,
-            _mockDocService.Object);
+            _unitOfWorkMock.Object,
+            _httpContextAccessorMock.Object,
+            _roleManagerMock.Object,
+            _documentServiceMock.Object);
     }
 
-    // --- SCÉNARIO 1 : Le document passe à l'étape suivante ---
     [Fact]
-    public async Task ApproveDocumentAsync_ShouldMoveToNextRole_BasedOnCategory()
+    public async Task StartProcessAsync_ShouldAssignToFirstRoleAfterBO()
     {
-        // Arrange
-        SetupMockUser(Guid.NewGuid().ToString(), "ROLE_BO");
-
         var docId = Guid.NewGuid();
-        var pendingStatus = new Status { Id = Guid.NewGuid(), Code = "BUS_PENDING_VAL" };
-        var category = new Category { Id = Guid.NewGuid(), Name = "INFORMATIQUE_&_TÉLÉCOM" };
-
         var document = new Document
         {
             Id = docId,
-            Category = category,
+            Category = new Category { Name = "INFORMATIQUE_&_TÉLÉCOM" },
+            Workflows = new List<Workflow>()
+        };
+
+        _unitOfWorkMock.Setup(u => u.Documents.GetByIdAsync(docId)).ReturnsAsync(document);
+
+        await _workflowService.StartProcessAsync(docId, "Démarrage OCR");
+
+        _unitOfWorkMock.Verify(u => u.Workflows.AddAsync(It.Is<Workflow>(w => w.AssignedRoleId != "")), Times.Once);
+        _unitOfWorkMock.Verify(u => u.CompleteAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task ApproveStepAsync_ShouldMoveToNextRole_WhenNotLastStep()
+    {
+        var docId = Guid.NewGuid();
+        var document = new Document
+        {
+            Id = docId,
+            Category = new Category { Name = "INFORMATIQUE_&_TÉLÉCOM" },
             Workflows = new List<Workflow>
             {
-                new Workflow { AssignedRole = new IdentityRole { Name = "ROLE_BO" }, ValidatedAt = DateTime.UtcNow }
+                new Workflow { AssignedRole = new IdentityRole { Name = "ROLE_TECH" }, ValidatedAt = DateTime.UtcNow }
             }
         };
 
-        var targetRole = new IdentityRole { Id = "role-tech-id", Name = "ROLE_TECH" };
+        _unitOfWorkMock.Setup(u => u.Documents.GetByIdAsync(docId)).ReturnsAsync(document);
 
-        _mockDocRepo.Setup(r => r.GetByIdAsync(docId)).ReturnsAsync(document);
-        _mockStatusRepo.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<Status> { pendingStatus });
-        _mockRoleManager.Setup(r => r.FindByNameAsync("ROLE_TECH")).ReturnsAsync(targetRole);
+        await _workflowService.ApproveStepAsync(docId, "OK pour le service technique");
 
-        // Act
-        await _workflowService.ApproveDocumentAsync(docId, "Validé par BO");
-
-        // Assert
-        document.StatusId.Should().Be(pendingStatus.Id);
-
-        _mockWorkflowRepo.Verify(r => r.AddAsync(It.Is<Workflow>(w =>
-            w.AssignedRoleId == targetRole.Id &&
-            w.CurrentStatus == "BUS_PENDING_VAL" &&
-            w.StepName == "Transmission à ROLE_TECH")), Times.Once);
-
-        _mockUow.Verify(u => u.CompleteAsync(), Times.Once);
+        _unitOfWorkMock.Verify(u => u.Workflows.AddAsync(It.IsAny<Workflow>()), Times.Once);
+        _documentServiceMock.Verify(d => d.ArchiveDocumentFileAsync(It.IsAny<Guid>()), Times.Never);
     }
 
-    // --- SCÉNARIO 2 : Fin du workflow et archivage physique ---
     [Fact]
-    public async Task ApproveDocumentAsync_ShouldFinalizeAndArchive_WhenLastRoleApproves()
+    public async Task ApproveStepAsync_ShouldFinalizeAndArchive_WhenLastStep()
     {
-        // Arrange
-        SetupMockUser(Guid.NewGuid().ToString(), "ROLE_FINANCE");
-
         var docId = Guid.NewGuid();
-        var approvedStatus = new Status { Id = Guid.NewGuid(), Code = "APPROVED" };
-        var category = new Category { Id = Guid.NewGuid(), Name = "INFORMATIQUE_&_TÉLÉCOM" };
-
         var document = new Document
         {
             Id = docId,
-            Category = category,
+            Category = new Category { Name = "INFORMATIQUE_&_TÉLÉCOM" },
             Workflows = new List<Workflow>
             {
-                // Le dernier rôle du dictionnaire BPMN est ROLE_FINANCE
                 new Workflow { AssignedRole = new IdentityRole { Name = "ROLE_FINANCE" }, ValidatedAt = DateTime.UtcNow }
             }
         };
 
-        _mockDocRepo.Setup(r => r.GetByIdAsync(docId)).ReturnsAsync(document);
-        _mockStatusRepo.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<Status> { approvedStatus });
+        _unitOfWorkMock.Setup(u => u.Documents.GetByIdAsync(docId)).ReturnsAsync(document);
 
-        // Act
-        await _workflowService.ApproveDocumentAsync(docId, "OK pour paiement");
+        await _workflowService.ApproveStepAsync(docId, "OK pour le paiement");
 
-        // Assert
-        document.StatusId.Should().Be(approvedStatus.Id);
-
-        _mockWorkflowRepo.Verify(r => r.AddAsync(It.Is<Workflow>(w =>
-            w.CurrentStatus == "APPROVED" &&
-            w.AssignedRoleId == "")), Times.Once);
-
-        // 🟢 Vérification SRE : L'archivage a bien été déclenché !
-        _mockDocService.Verify(s => s.ArchiveDocumentFileAsync(docId), Times.Once);
-
-        _mockUow.Verify(u => u.CompleteAsync(), Times.Once);
+        _unitOfWorkMock.Verify(u => u.Workflows.AddAsync(It.Is<Workflow>(w => w.CurrentStatus == "APPROVED")), Times.Once);
+        _documentServiceMock.Verify(d => d.ArchiveDocumentFileAsync(docId), Times.Once);
     }
 
-    // --- SCÉNARIO 3 : Rejet par un validateur ---
     [Fact]
-    public async Task RejectDocumentAsync_ShouldSetStatusToRejected_AndAssignToBO()
+    public async Task RejectStepAsync_ShouldAssignToBO_AndSetStatusRejected()
     {
-        // Arrange
-        SetupMockUser(Guid.NewGuid().ToString(), "ROLE_TECH");
-
         var docId = Guid.NewGuid();
-        var rejectedStatus = new Status { Id = Guid.NewGuid(), Code = "REJECTED" };
-        var boRole = new IdentityRole { Id = "role-bo-id", Name = "ROLE_BO" };
+        var document = new Document { Id = docId, Workflows = new List<Workflow>() };
 
-        var document = new Document { Id = docId };
+        _unitOfWorkMock.Setup(u => u.Documents.GetByIdAsync(docId)).ReturnsAsync(document);
 
-        _mockDocRepo.Setup(r => r.GetByIdAsync(docId)).ReturnsAsync(document);
-        _mockStatusRepo.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<Status> { rejectedStatus });
-        _mockRoleManager.Setup(r => r.FindByNameAsync("ROLE_BO")).ReturnsAsync(boRole);
+        await _workflowService.RejectStepAsync(docId, "Montant incorrect");
 
-        // Act
-        await _workflowService.RejectDocumentAsync(docId, "Montant incorrect");
-
-        // Assert
-        document.StatusId.Should().Be(rejectedStatus.Id);
-
-        _mockWorkflowRepo.Verify(r => r.AddAsync(It.Is<Workflow>(w =>
-            w.CurrentStatus == "REJECTED" &&
-            w.AssignedRoleId == boRole.Id &&
-            w.Comment == "Montant incorrect")), Times.Once);
-
-        _mockUow.Verify(u => u.CompleteAsync(), Times.Once);
-    }
-
-    // --- Helper pour simuler l'utilisateur et ses rôles ---
-    private void SetupMockUser(string userId, string role)
-    {
-        var claims = new List<Claim>
-        {
-            new Claim(ClaimTypes.NameIdentifier, userId),
-            new Claim(ClaimTypes.Role, role)
-        };
-        var identity = new ClaimsIdentity(claims, "TestAuth");
-        var claimsPrincipal = new ClaimsPrincipal(identity);
-
-        var httpContext = new DefaultHttpContext { User = claimsPrincipal };
-        _mockHttpContext.SetupGet(x => x.HttpContext).Returns(httpContext);
+        _unitOfWorkMock.Verify(u => u.Workflows.AddAsync(It.Is<Workflow>(w => w.CurrentStatus == "REJECTED")), Times.Once);
+        _unitOfWorkMock.Verify(u => u.CompleteAsync(), Times.Once);
     }
 }

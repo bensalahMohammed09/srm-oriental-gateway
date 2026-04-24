@@ -75,7 +75,7 @@ public class ProfileServiceTests
 
         // Assert
         await act.Should().ThrowAsync<UnauthorizedAccessException>()
-                 .WithMessage("Utilisateur non identifié.");
+                 .WithMessage("Utilisateur non identifié dans le jeton.");
     }
 
     [Fact]
@@ -93,7 +93,7 @@ public class ProfileServiceTests
 
         // Assert
         await act.Should().ThrowAsync<KeyNotFoundException>()
-                 .WithMessage("Utilisateur introuvable.");
+                 .WithMessage("Utilisateur introuvable dans la base de données.");
     }
 
     // --- TESTS POUR GetDashboardStatsAsync ---
