@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Srm.Gateway.Infrastructure.Data;
@@ -11,9 +12,11 @@ using Srm.Gateway.Infrastructure.Data;
 namespace Srm.Gateway.Infrastructure.Migrations
 {
     [DbContext(typeof(SrmDbContext))]
-    partial class SrmDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260423164724_AddRowVersionToEntities")]
+    partial class AddRowVersionToEntities
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

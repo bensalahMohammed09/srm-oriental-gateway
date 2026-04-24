@@ -1,17 +1,16 @@
-using Microsoft.AspNetCore.Identity;
+﻿using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Srm.Gateway.Domain.Entities;
 
 namespace Srm.Gateway.Infrastructure.Data;
 
-// On h�rite maintenant de IdentityDbContext pour int�grer les tables AspNetUsers, AspNetRoles, etc.
 public class SrmDbContext : IdentityDbContext<IdentityUser>
 {
     public SrmDbContext(DbContextOptions<SrmDbContext> options) : base(options) { }
 
     public DbSet<Document> Documents { get; set; }
-    public DbSet<OcrMetadata> Metadata { get; set; }
+    // 🗑️ SUPPRIMÉ : public DbSet<OcrMetadata> Metadata { get; set; } (On n'en a plus besoin !)
     public DbSet<Status> Statuses { get; set; }
     public DbSet<Category> Categories { get; set; }
     public DbSet<Workflow> Workflows { get; set; }
@@ -30,27 +29,39 @@ public class SrmDbContext : IdentityDbContext<IdentityUser>
         modelBuilder.Entity<IdentityRoleClaim<string>>().ToTable("identity_role_claims");
         modelBuilder.Entity<IdentityUserToken<string>>().ToTable("identity_user_tokens");
 
-        // --- Tes mappings existants (Inchang�s) ---
+        // --- Tes mappings existants ---
         modelBuilder.Entity<Category>().ToTable("categories");
         modelBuilder.Entity<Status>().ToTable("statuses");
-        modelBuilder.Entity<Document>().ToTable("documents");
-        modelBuilder.Entity<OcrMetadata>().ToTable("ocr_metadata");
         modelBuilder.Entity<Workflow>().ToTable("workflows");
         modelBuilder.Entity<AuditLog>().ToTable("audit_logs");
+        // 🗑️ SUPPRIMÉ : modelBuilder.Entity<OcrMetadata>().ToTable("ocr_metadata");
 
-        modelBuilder.Entity<OcrMetadata>()
-            .HasOne(m => m.Document)
-            .WithMany(d => d.Metadata)
-            .HasForeignKey(m => m.DocumentId)
-            .OnDelete(DeleteBehavior.Cascade);
+        // 🌟 NOUVEAU : Configuration avancée de l'entité Document (JSONB + GIN)
+        modelBuilder.Entity<Document>(entity =>
+        {
+            entity.ToTable("documents");
+            entity.HasIndex(d => d.Reference).IsUnique();
 
+            // 1. On indique que la propriété Metadata (le Dictionnaire) doit être stockée sous forme de JSON
+            entity.OwnsOne(d => d.Metadata, builder =>
+            {
+                builder.ToJson();
+            });
+
+            // 2. On crée l'Index GIN pour que PostgreSQL puisse chercher instantanément dans le JSON
+            // On utilise "Metadata" (string) car c'est une propriété de navigation ("Owned type") dans EF Core
+            entity.HasIndex("Metadata").HasMethod("gin");
+        });
+
+        // --- Relations existantes (Inchangées) ---
         modelBuilder.Entity<Workflow>()
             .HasOne(w => w.Document)
             .WithMany(d => d.Workflows)
             .HasForeignKey(w => w.DocumentId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        modelBuilder.Entity<Document>().HasIndex(d => d.Reference).IsUnique();
         modelBuilder.Entity<Status>().HasIndex(s => s.Code).IsUnique();
+
+        // 🗑️ SUPPRIMÉ : La relation HasOne/WithMany pour OcrMetadata a été retirée.
     }
 }

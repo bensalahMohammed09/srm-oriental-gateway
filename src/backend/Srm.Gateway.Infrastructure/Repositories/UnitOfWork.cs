@@ -16,8 +16,7 @@ namespace Srm.Gateway.Infrastructure.Repositories
         private IBaseRepository<Document>? _documents;
         public IBaseRepository<Document> Documents => _documents ??= new BaseRepository<Document>(_context);
 
-        private IBaseRepository<OcrMetadata>? _metadata;
-        public IBaseRepository<OcrMetadata> Metadata => _metadata ??= new BaseRepository<OcrMetadata>(_context);
+
 
         private IBaseRepository<Workflow>? _workflows;
         public IBaseRepository<Workflow> Workflows => _workflows ??= new BaseRepository<Workflow>(_context);

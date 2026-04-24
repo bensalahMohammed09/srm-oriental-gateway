@@ -50,6 +50,10 @@ namespace Srm.Gateway.Infrastructure
             // 🚀 LA PIÈCE MANQUANTE : On enregistre le ProfileService !
             services.AddScoped<IProfileService, ProfileService>();
 
+            services.AddScoped<IFileStorageService, FileStorageService>();
+
+            services.AddScoped<IDocumentMetadataService, DocumentMetadataService>();
+
             return services;
         }
     }

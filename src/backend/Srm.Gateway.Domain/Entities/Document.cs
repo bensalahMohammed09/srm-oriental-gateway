@@ -6,12 +6,15 @@ public class Document : BaseEntity
     public string SupplierName { get; set; } = string.Empty;   
     public decimal? TotalAmount { get; set; }
 
+    public string? SourceFile { get; set; }
     public Guid StatusId { get; set; }
     public Status Status { get; set; } = null!;
 
     public Guid? CategoryId { get; set; }
     public Category? Category { get; set; }
 
-    public virtual ICollection<OcrMetadata> Metadata { get; set; } = new List<OcrMetadata>();
+    public Dictionary<string, DocumentFieldValue> Metadata { get; set; } = new();
+
+
     public virtual ICollection<Workflow> Workflows { get; set; } = new List<Workflow>();
 }
