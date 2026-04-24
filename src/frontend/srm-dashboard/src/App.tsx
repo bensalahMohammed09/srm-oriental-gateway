@@ -1,60 +1,71 @@
 import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'; // <-- NOUVEAU
 import { AuthProvider, useAuth } from './hooks/useAuth';
+
 import LoginPage from './pages/LoginPage';
+import DashboardHome from './pages/DashboardHome';
+import PendingInbox from './pages/BO/PendingInbox';
+import ManualUpload from './pages/BO/ManualUpload';
+import DocumentIndexation from './pages/BO/DocumentIndexation';
+import FailedQueue from './pages/BO/FailedQueue';
+import RecoveryForm from './pages/BO/RecoveryForm';
 import DashboardLayout from './components/DashboardLayout';
 
-/**
- * AppContent - Gère l'affichage conditionnel (Login vs Dashboard)
- */
-const AppContent = () => {
+// Initialisation du client React Query (SRE Standard)
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1, // 1 retry en cas d'échec réseau
+      refetchOnWindowFocus: true, // Auto-refresh quand l'agent revient sur l'onglet
+    },
+  },
+});
+
+const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: string[] }) => {
   const { user, isLoading } = useAuth();
+  if (isLoading) return <div className="h-screen bg-slate-950"></div>; // Écran noir propre pendant le boot
+  if (!user) return <Navigate to="/login" replace />;
 
-  // 1. Écran d'attente pendant que l'API vérifie le cookie /me
-  if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen bg-slate-950 text-white">
-        <div className="w-10 h-10 border-4 border-srm-blue border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p className="text-slate-400 animate-pulse text-sm font-medium tracking-widest uppercase">SRM Gateway</p>
-      </div>
-    );
+  if (allowedRoles && !allowedRoles.some(role => user.roles.includes(role))) {
+    const isBO = user.roles.includes('ROLE_BO');
+    return <Navigate to={isBO ? "/bo/pending" : "/dashboard"} replace />;
   }
 
-  // 2. Si l'utilisateur n'est pas reconnu -> Page de Connexion
-  if (!user) {
-    return <LoginPage />;
+  return <DashboardLayout title="SRM Gateway">{children}</DashboardLayout>;
+};
+
+const RootRedirect = () => {
+  const { user, isLoading } = useAuth();
+  if (isLoading) return null;
+  if (!user) return <Navigate to="/login" replace />;
+  
+  if (user.roles.some(r => ['ROLE_ADMIN', 'ROLE_FINANCE'].includes(r))) {
+    return <Navigate to="/dashboard" replace />;
   }
-
-  // 3. Si l'utilisateur est connecté -> Dashboard complet
-  return (
-    <DashboardLayout title="Vue d'ensemble">
-      <div className="space-y-6">
-        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-8 shadow-sm">
-          <h2 className="text-2xl font-bold text-white tracking-tight">
-            Bienvenue, <span className="text-srm-blue">{user.userName}</span>
-          </h2>
-          <p className="mt-2 text-slate-400">
-            Vous êtes connecté au portail SRM Gateway avec le profil : 
-            <span className="ml-2 font-mono text-xs bg-slate-800 px-2 py-1 rounded text-srm-blue border border-slate-700">
-              {user.roles.join(' / ')}
-            </span>
-          </p>
-        </div>
-
-        {/* Grille de stats vide pour l'instant */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-32 rounded-xl border border-slate-800 bg-slate-900/30 animate-pulse"></div>
-          ))}
-        </div>
-      </div>
-    </DashboardLayout>
-  );
+  return <Navigate to="/bo/pending" replace />;
 };
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/" element={<RootRedirect />} />
+            
+            <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['ROLE_ADMIN', 'ROLE_FINANCE']}><DashboardHome /></ProtectedRoute>} />
+            <Route path="/bo/pending" element={<ProtectedRoute allowedRoles={['ROLE_BO']}><PendingInbox /></ProtectedRoute>} />
+            <Route path="/bo/manual-upload" element={<ProtectedRoute allowedRoles={['ROLE_BO']}><ManualUpload /></ProtectedRoute>} />
+            <Route path="/bo/indexation/:id" element={<ProtectedRoute allowedRoles={['ROLE_BO']}><DocumentIndexation /></ProtectedRoute>} />
+            <Route path="/bo/failed" element={<ProtectedRoute allowedRoles={['ROLE_BO']}><FailedQueue /></ProtectedRoute>} />
+            <Route path="/bo/recover/:fileName" element={<ProtectedRoute allowedRoles={['ROLE_BO']}><RecoveryForm /></ProtectedRoute>} />
+            
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }

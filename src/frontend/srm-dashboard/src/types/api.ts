@@ -1,50 +1,64 @@
 /**
- * --- 1. PROFIL & AUTHENTIFICATION ---
+ * SRM Gateway - API Type Definitions (SRE Alignment)
+ * Ces interfaces sont synchronisées avec le fichier Dtos.cs du Backend.
+ * Standard de nommage : camelCase (aligné sur JsonSerializerOptions du Middleware)
  */
+
+// --- UTILISATEURS & AUTH ---
 export interface UserProfileDto {
   id: string;
   email: string;
   userName: string;
   roles: string[];
-  serverTime: string;
+  serverTime: string; // ISO String pour synchronisation horaire
 }
 
-/**
- * --- 2. DOCUMENTS & RÉPONSES API ---
- */
+// --- DOCUMENTS & RÉPONSES ---
 export interface DocumentResponse {
-  id: string; // Guid en C#
+  id: string;
   reference: string;
-  statusName: string;
-  categoryName?: string;
-  createdAt: string; // DateTime ISO string
+  status: string;
+  category: string | null;
+  createdAt: string;
 }
 
-export interface OcrMetadata {
+export interface FailedFileResponse {
+  fileName: string;
+  sizeKb: number;
+  creationTime: string;
+}
+
+export interface Category {
   id: string;
-  key: string;
-  value: string;
-  confidence: number;
+  name: string;
 }
 
-/**
- * --- 3. VALIDATION & CORRECTION (BO -> API) ---
- */
-export interface OcrMetadataUpdateDto {
-  id: string;
-  value: string;
+// --- WORKFLOW & HISTORIQUE ---
+export interface WorkflowStepResponse {
+  stepName: string;
+  action: string;
+  userFullName: string | null;
+  roleName: string | null;
+  date: string | null;
+  comment: string | null;
+  isCompleted: boolean;
 }
 
+// --- VALIDATION & INDEXATION (Payloads) ---
 export interface DocumentValidationRequest {
   categoryId: string;
   reference: string;
   totalAmount: number;
-  metadataCorrections: OcrMetadataUpdateDto[];
+  metadataCorrections?: Record<string, string>; // Dictionary<string, string> en C#
 }
 
-/**
- * --- 4. DASHBOARD & STATISTIQUES ---
- */
+export interface ManualRecoveryRequest {
+  fileName: string;
+  reference: string;
+  totalAmount: number;
+}
+
+// --- TABLEAUX DE BORD (DASHBOARDS) ---
 export interface CategoryDistributionDto {
   name: string;
   value: number;
@@ -66,21 +80,11 @@ export interface DashboardStatsDto {
   recentActivity: RecentActivityDto[];
 }
 
-/**
- * --- 5. WORKFLOW & ACTIONS ---
- */
-export interface WorkflowActionRequest {
+// --- ACTIONS WORKFLOW ---
+export interface ApprovalRequest {
   comment?: string;
 }
 
-/**
- * --- 6. UPLOAD & RÉCUPÉRATION MANUELLE ---
- */
-export interface ManualRecoveryRequest {
-  fileName: string;
-  reference: string;
-  totalAmount?: number;
+export interface RejectionRequest {
+  reason: string;
 }
-
-// Pour le ManualUploadRequest, on utilise souvent FormData en React 
-// car il contient un fichier physique (IFormFile)
