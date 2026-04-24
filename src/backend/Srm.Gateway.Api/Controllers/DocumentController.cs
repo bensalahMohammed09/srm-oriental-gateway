@@ -1,21 +1,34 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Srm.Gateway.Application.DTOs;
 using Srm.Gateway.Application.Interfaces;
-using Srm.Gateway.Application.Services;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+
+namespace Srm.Gateway.API.Controllers;
 
 [ApiController]
 [Route("api/v1/[controller]")]
-public class DocumentController(IDocumentService service) : ControllerBase
+public class DocumentController : ControllerBase
 {
-    private readonly IDocumentService _service = service;
+    private readonly IDocumentService _service;
+    private readonly IDocumentMetadataService _metadataService;
+
+    public DocumentController(IDocumentService service, IDocumentMetadataService metadataService)
+    {
+        _service = service;
+        _metadataService = metadataService;
+    }
 
     [HttpPost("ingest")]
     [ProducesResponseType(StatusCodes.Status201Created)]
     public async Task<IActionResult> Ingest([FromBody] OcrIngestionRequest request)
     {
         var documentId = await _service.IngestDocumentAsync(request);
-
-        return CreatedAtAction(nameof(GetById),new {id =  documentId}, new {id = documentId});
+        return CreatedAtAction(nameof(GetById), new { id = documentId }, new { id = documentId });
     }
 
     [HttpPost("{id:guid}/confirm-indexation")]
@@ -26,15 +39,60 @@ public class DocumentController(IDocumentService service) : ControllerBase
         var document = await _service.GetByIdAsync(id);
         if (document == null) return NotFound();
 
+        // 🌟 La validation métier lance le workflow. (Le fichier est déjà dans Processed grâce à l'OCR)
         await _service.ConfirmIndexationAsync(id, request);
         return NoContent();
     }
+
+    // ==========================================
+    // 🌟 ENDPOINTS SPLIT-SCREEN & METADATA (JSONB)
+    // ==========================================
+
+    [HttpGet("{id:guid}/details")]
+    public async Task<ActionResult<DocumentDetailsResponse>> GetDetails(Guid id)
+    {
+        // 🌟 L'endpoint ultime pour le Frontend : Renvoie TOUT le document d'un coup
+        var document = await _service.GetDocumentDetailsAsync(id);
+        if (document == null) return NotFound(new { error = "Document introuvable." });
+
+        return Ok(document);
+    }
+
+    [HttpPut("{id:guid}/metadata")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateMetadata(Guid id, [FromBody] UpdateMetadataRequest request)
+    {
+        try
+        {
+            // 🌟 FIX CS1503 : Mapping du DTO Frontend vers l'Entité Backend
+            var domainMetadata = request.NewMetadata.ToDictionary(
+                kvp => kvp.Key,
+                kvp => new Srm.Gateway.Domain.Entities.DocumentFieldValue
+                {
+                    Value = kvp.Value.Value,
+                    Confidence = kvp.Value.Confidence
+                }
+            );
+
+            // Approche "Clear & Replace"
+            await _metadataService.UpdateMetadataAsync(id, domainMetadata);
+            return NoContent();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+    }
+
+    // ==========================================
+    // 🌟 ENDPOINTS CLASSIQUES (LISTES & FICHIERS)
+    // ==========================================
 
     [HttpGet("pending")]
     public async Task<ActionResult<IEnumerable<DocumentResponse>>> GetPending()
     {
         var results = await _service.GetPendingIndexationAsync();
-
         return Ok(results);
     }
 
@@ -42,14 +100,13 @@ public class DocumentController(IDocumentService service) : ControllerBase
     public async Task<ActionResult<DocumentResponse>> GetById(Guid id)
     {
         var document = await _service.GetByIdAsync(id);
-        if(document == null) return NotFound();
+        if (document == null) return NotFound();
 
         return Ok(document);
     }
 
     ///<summary>
-    ///Receives file from React Dashboard and saves it to the shared volume.
-    ///This triggers the Python OCR Worker. No Db entry is created yet
+    /// Reçoit le fichier depuis React (Bouton Upload OCR) et le sauvegarde dans le volume partagé (Pending).
     ///</summary>
     [HttpPost("upload")]
     [Consumes("multipart/form-data")]
@@ -58,40 +115,33 @@ public class DocumentController(IDocumentService service) : ControllerBase
         if (file == null || file.Length == 0)
             return BadRequest("No file provided!");
 
-        try
-        {
-            await _service.SaveFileToPendingAsync(file);
+        await _service.SaveFileToPendingAsync(file);
 
-            return Accepted(new
-            {
-                message = "Upload successful. Processing started.",
-                fileName = file.FileName
-            });
-        }
-        catch (Exception ex)
+        return Accepted(new
         {
-            return StatusCode(500, ex.Message);
-        }
+            message = "Upload successful. Processing started.",
+            fileName = file.FileName
+        });
     }
 
-    [HttpGet("{id}/file")]
+    [HttpGet("{id:guid}/file")]
     public async Task<IActionResult> GetFile(Guid id)
     {
         try
         {
-            var (stream, contentType, fileName) = await _service.GetDocumentFileAsync(id);
-
-            return File(stream, contentType);
+            var fileDto = await _service.GetFileForViewAsync(id);
+            return File(fileDto.Stream, fileDto.ContentType, fileDto.FileName);
         }
-        catch(FileNotFoundException ex)
+        catch (FileNotFoundException ex)
         {
-            return NotFound(ex.Message);
+            return NotFound(new { error = ex.Message });
         }
-        catch (Exception ex)
+        catch (KeyNotFoundException ex)
         {
-            return StatusCode(500, ex.Message);
+            return NotFound(new { error = ex.Message });
         }
     }
+
     [HttpPost("failed/recover")]
     public async Task<IActionResult> RecoverFailedDocument([FromBody] ManualRecoveryRequest request)
     {
@@ -100,7 +150,7 @@ public class DocumentController(IDocumentService service) : ControllerBase
             var documentId = await _service.RecoverFailedDocumentAsync(request);
             return Ok(new { message = "Document récupéré.", documentId });
         }
-        catch (InvalidOperationException ex) // <-- Le doublon est attrapé ici !
+        catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = ex.Message });
         }
@@ -108,36 +158,23 @@ public class DocumentController(IDocumentService service) : ControllerBase
         {
             return NotFound(new { error = ex.Message });
         }
-        catch(Exception ex)
-        {
-            return StatusCode(500,ex.Message);
-        }
     }
 
     [HttpGet("failed")]
+    [ProducesResponseType(typeof(IEnumerable<FailedFileResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetFailedFiles()
     {
-        try
-        {
-            var files = await _service.GetFailedFilesAsync();
-            return Ok(files);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { error = $"Erreur lors de la lecture du dossier d'échec : {ex.Message}" });
-        }
+        var files = await _service.GetFailedFilesAsync();
+        return Ok(files);
     }
+
     [HttpGet("failed/{fileName}/file")]
     public async Task<IActionResult> GetFailedFile(string fileName)
     {
         try
         {
-            // Attention au décodage de l'URL si le nom du fichier contient des espaces !
-            // ASP.NET s'en charge généralement tout seul.
-            var (stream, contentType) = await _service.GetFailedDocumentFileAsync(fileName);
-
-            // Comme pour processed, on ne met pas 'fileName' ici pour forcer l'affichage inline
-            return File(stream, contentType);
+            var fileDto = await _service.GetFailedDocumentFileAsync(fileName);
+            return File(fileDto.Stream, fileDto.ContentType, fileDto.FileName);
         }
         catch (FileNotFoundException ex)
         {
@@ -147,25 +184,36 @@ public class DocumentController(IDocumentService service) : ControllerBase
         {
             return BadRequest(new { error = ex.Message });
         }
+    }
+
+    // 🌟 CORRECTION : Formulaire Data-Only pour la Saisie Manuelle (Sans IFormFile)
+    [HttpPost("manual-upload")]
+    public async Task<IActionResult> ManualUpload([FromBody] ManualUploadRequest request)
+    {
+        try
+        {
+            var documentId = await _service.CreateManualDocumentAsync(request);
+            return Ok(new { id = documentId, message = "Saisie manuelle créée avec succès." });
+        }
         catch (Exception ex)
         {
-            return StatusCode(500, new { error = $"Erreur lors de la récupération du fichier en échec : {ex.Message}" });
+            return BadRequest(new { error = ex.Message });
         }
     }
 
-
-    [HttpPost("manual-upload")] // <-- Change le nom de la route ici !
-    [Consumes("multipart/form-data")]
-    public async Task<IActionResult> ManualUpload([FromForm] ManualUploadRequest request)
-    {
-        var documentId = await _service.CreateManualDocumentAsync(request);
-        return Ok(new { id = documentId, message = "Document créé manuellement avec succès." });
-    }
-    [HttpGet("{id}/view")]
+    [HttpGet("{id:guid}/view")]
     public async Task<IActionResult> ViewFile(Guid id)
     {
-        var fileDto = await _service.GetFileForViewAsync(id);
-        return File(fileDto.Stream, fileDto.ContentType, enableRangeProcessing: true);
+        try
+        {
+            var fileDto = await _service.GetFileForViewAsync(id);
+            // enableRangeProcessing permet de streamer de gros PDFs efficacement
+            return File(fileDto.Stream, fileDto.ContentType, enableRangeProcessing: true);
+        }
+        catch (Exception ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
     }
 
     [HttpGet("search")]
@@ -174,5 +222,4 @@ public class DocumentController(IDocumentService service) : ControllerBase
         var results = await _service.SearchDocumentsAsync(query, status);
         return Ok(results);
     }
-
 }

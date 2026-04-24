@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using Prometheus;
 using Scalar.AspNetCore;
 using Serilog;
 using Serilog.Events;
@@ -14,6 +13,7 @@ using Srm.Gateway.Infrastructure.Data;
 using Srm.Gateway.Application.Services;
 using Srm.Gateway.Application.Interfaces;
 using System.Text;
+using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
 

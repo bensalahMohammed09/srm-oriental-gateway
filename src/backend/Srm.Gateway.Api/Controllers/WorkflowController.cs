@@ -1,43 +1,92 @@
 ﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Srm.Gateway.Application.DTOs;
 using Srm.Gateway.Application.Interfaces;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace Srm.Gateway.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/[controller]")]
-[Authorize] // 🛡️ Personne ne touche au workflow sans être connecté
-public class WorkflowController : ControllerBase
+[Authorize] // 🛡️ Accès restreint aux utilisateurs authentifiés
+public class WorkflowController(IWorkflowService workflowService) : ControllerBase
 {
-    private readonly IWorkflowService _workflowService;
-
-    public WorkflowController(IWorkflowService workflowService)
-    {
-        _workflowService = workflowService;
-    }
+    private readonly IWorkflowService _workflowService = workflowService;
 
     [HttpGet("my-tasks")]
+    [ProducesResponseType(typeof(IEnumerable<DocumentResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetMyTasks()
     {
         var tasks = await _workflowService.GetMyPendingTasksAsync();
-        return Ok(tasks);
+
+        // ✅ Mapping explicite vers le DTO de réponse pour le Frontend React
+        var response = tasks.Select(d => new DocumentResponse(
+            d.Id,
+            d.Reference,
+            d.Status?.Name ?? "Statut inconnu",
+            d.Category?.Name ?? "Non catégorisé",
+            d.CreatedAt
+        ));
+
+        return Ok(response);
     }
 
-    [HttpPost("{id}/approve")]
-    public async Task<IActionResult> Approve(Guid id, [FromBody] WorkflowActionRequest request)
+    [HttpGet("{id:guid}/history")]
+    [ProducesResponseType(typeof(IEnumerable<WorkflowStepResponse>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetHistory(Guid id)
     {
-        await _workflowService.ApproveDocumentAsync(id, request.Comment);
-        return NoContent();
+        var history = await _workflowService.GetWorkflowHistoryAsync(id);
+        return Ok(history);
     }
 
-    [HttpPost("{id}/reject")]
-    public async Task<IActionResult> Reject(Guid id, [FromBody] WorkflowActionRequest request)
+    [HttpPost("{id:guid}/approve")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Approve(Guid id, [FromBody] ApprovalRequest request)
     {
-        if (string.IsNullOrEmpty(request.Comment))
-            return BadRequest("Un motif de rejet est obligatoire.");
+        try
+        {
+            await _workflowService.ApproveStepAsync(id, request.Comment);
+            return NoContent();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+        catch (Exception ex) when (ex.Message.Contains("Conflit"))
+        {
+            // 🛡️ Gestion de la concurrence optimiste (RowVersion)
+            return Conflict(new { error = ex.Message });
+        }
+    }
 
-        await _workflowService.RejectDocumentAsync(id, request.Comment);
-        return NoContent();
+    [HttpPost("{id:guid}/reject")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Reject(Guid id, [FromBody] RejectionRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Reason))
+            return BadRequest(new { error = "Un motif de rejet est obligatoire pour renvoyer le dossier au Bureau d'Ordre." });
+
+        try
+        {
+            await _workflowService.RejectStepAsync(id, request.Reason);
+            return NoContent();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+        catch (Exception ex) when (ex.Message.Contains("Conflit"))
+        {
+            return Conflict(new { error = ex.Message });
+        }
     }
 }
