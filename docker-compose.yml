@@ -18,9 +18,10 @@ services:
       - "50000:50000"
     volumes:
       - jenkins-srm_data:/var/jenkins_home
-      - /var/run/docker.sock:/var/run/docker.sock # Docker-in-Docker capability
+      - /var/run/docker.sock:/var/run/docker.sock:ro # Docker-in-Docker capability
     environment:
       - JAVA_OPTS=-Xmx512m -Xms512m
+      - JENKINS_OPTS=--prefix=/jenkins
     deploy:
       resources:
         limits:
@@ -29,7 +30,21 @@ services:
       - sec-net
       - ops-net
     restart: unless-stopped
-
+  # ----------------------------------------------------------------------------
+  # (Nginx Intern)
+  # ----------------------------------------------------------------------------
+  srm-admin-proxy:
+    image: nginx:${NGINX_VERSION}
+    container_name: srm-admin-proxy
+    ports:
+      - "8888:80"
+    volumes:
+      - ./infra/nginx/admin.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./infra/nginx/security_headers.conf:/etc/nginx/conf.d/security_headers.conf:ro
+    networks:
+      - ops-net
+      - sec-net
+    restart: always
   # ----------------------------------------------------------------------------
   # BACKEND API (.NET)
   # ----------------------------------------------------------------------------
@@ -42,8 +57,12 @@ services:
         API_INTERNAL_PORT: ${API_INTERNAL_PORT}
         API_ENV: ${API_ENV}
     container_name: srm-api
+    environment:
+      - ASPNETCORE_URLS=http://+:8080
     volumes:
       - ./src/workers/ocr-service/uploads:/app/uploads
+    ports:
+      - "8080:8080"
     deploy:
       resources:
         limits:
@@ -53,7 +72,9 @@ services:
       - back-net
       - ops-net
     depends_on:
-      - srm-db
+      srm-db:
+        condition: service_healthy
+    restart: on-failure
 
   # ----------------------------------------------------------------------------
   # FRONTEND DASHBOARD (React + Nginx)
@@ -72,7 +93,8 @@ services:
     ports:
       - "${DASHBOARD_EXTERNAL_PORT}:${DASHBOARD_INTERNAL_PORT}"
     volumes:
-      - ./infra/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./infra/nginx/public.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./infra/nginx/security_headers.conf:/etc/nginx/conf.d/security_headers.conf:ro
     deploy:
       resources:
         limits:
@@ -107,9 +129,6 @@ services:
     networks:
       - back-net
       - ops-net
-    depends_on:
-      srm-db:
-        condition: service_healthy
     restart: on-failure
       
   # ----------------------------------------------------------------------------
@@ -131,7 +150,7 @@ services:
       - "${DB_EXTERNAL_PORT}:${DB_INTERNAL_PORT}"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    healthcheck: # Essential for dependent services (API/Worker)
+    healthcheck: # Essential for dependent service (API)
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
@@ -159,14 +178,28 @@ services:
       - N8N_PORT=${N8N_INTERNAL_PORT}
       - N8N_PROTOCOL=http
       - NODE_ENV=development
-      - WEBHOOK_URL=http://localhost:${N8N_EXTERNAL_PORT}/ 
+      - N8N_PATH=/n8n/
+      - WEBHOOK_URL=http://localhost:8888/n8n/ 
       - N8N_EXECUTORS_PROCESS=main
     volumes:
       - n8n_data:/home/node/.n8n
     networks:
+      - back-net
       - ops-net
     restart: unless-stopped
-    
+  # ----------------------------------------------------------------------------
+  # Emails Mock (Mailpit)
+  # ----------------------------------------------------------------------------
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: mailpit
+    platform: linux/amd64
+    restart: always
+    ports:
+      - "8025:8025" # Web UI
+      - "1025:1025" # SMTP
+    networks:
+      - back-net
 
   # ----------------------------------------------------------------------------
   # OBSERVABILITY STACK (Prometheus, Loki, Grafana, Promtail)
@@ -179,7 +212,7 @@ services:
     ports:
       - "${PROMETHEUS_EXTERNAL_PORT}:${PROMETHEUS_INTERNAL_PORT}"
     volumes:
-      - prometheus_config:/etc/prometheus
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -200,7 +233,7 @@ services:
       - "${LOKI_EXTERNAL_PORT}:${LOKI_INTERNAL_PORT}"
     user: "0"
     volumes:
-      - loki_config:/etc/loki
+      - ./infra/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
       - loki_data:/tmp/loki
     command: -config.file=/etc/loki/local-config.yaml
     deploy:
@@ -218,19 +251,33 @@ services:
       args:
         GRAFANA_VERSION: ${GRAFANA_VERSION}
         GRAFANA_INTERNAL_PORT: ${GRAFANA_INTERNAL_PORT}
-        GRAFANA_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+        # On passe le mot de passe en ARG seulement si on veut le baker, 
+        # mais c'est mieux en ENV de runtime ci-dessous.
     container_name: grafana
+    # --- TOUTE LA CONFIGURATION EST ICI ---
+    environment:
+      # Sécurité
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      # Réseau & Proxy (C'est ici que tu règles ton problème de 502)
+      - GF_SERVER_HTTP_PORT=${GRAFANA_INTERNAL_PORT}
+      - GF_SERVER_DOMAIN=localhost
+      - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s:8888/grafana/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=false
+      # Divers
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_AUTH_ANONYMOUS_ENABLED=false
     ports:
       - "${GRAFANA_EXTERNAL_PORT}:${GRAFANA_INTERNAL_PORT}"
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./infra/grafana/provisioning:/etc/grafana/provisioning # Auto-config datasources
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - ops-net
     deploy:
       resources:
         limits:
-          memory: 256M
-    networks:
-      - ops-net
+          memory: 512M
+    restart: unless-stopped
 # add comment to test
   promtail:
     build:

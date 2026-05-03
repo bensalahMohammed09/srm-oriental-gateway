@@ -20,7 +20,6 @@ COPY --from=build /app/dist .
 
 # On copie le fichier de configuration fixe (SANS VARIABLES)
 # Assurez-vous que votre fichier infra/nginx/nginx.conf contient "listen 8080;"
-COPY infra/nginx/nginx.conf /etc/nginx/conf.d/default.conf
 
 # Configuration des permissions pour l'utilisateur nginx (sécurité)
 # On donne les droits sur les dossiers de cache, logs et config pour éviter les erreurs au démarrage

@@ -1,24 +1,18 @@
+# On utilise uniquement des ARG pour la construction de l'image
 ARG GRAFANA_VERSION
 FROM grafana/grafana:${GRAFANA_VERSION}
 
-# Technical labels
 LABEL component="Visualization-Platform"
 LABEL project="SRM-Oriental-Gateway"
 
-# Set environment variables for Grafana
-ARG GRAFANA_INTERNAL_PORT
-ARG GRAFANA_ADMIN_PASSWORD
+# On ne définit PLUS de ENV ici. 
+# Toute la configuration se fera au démarrage via le Docker Compose.
 
-ENV GF_SERVER_HTTP_PORT=${GRAFANA_INTERNAL_PORT} \
-    GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD} \
-    GF_ANALYTICS_REPORTING_ENABLED=false \
-    GF_AUTH_ANONYMOUS_ENABLED=false
+# On copie le provisioning (indispensable car c'est un fichier physique)
+COPY --chown=grafana:grafana infra/grafana/provisioning/ /etc/grafana/provisioning/
 
-# Copy the provisioning folder to automate data sources setup
-COPY infra/grafana/provisioning/ /etc/grafana/provisioning/
-
-# Use non-root user for security
 USER grafana
 
+# On expose le port (informatif)
+ARG GRAFANA_INTERNAL_PORT
 EXPOSE ${GRAFANA_INTERNAL_PORT}
-
