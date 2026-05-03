@@ -1,54 +1,30 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import api from '../../api/axios';
-import { useAuth } from '../../hooks/useAuth';
 import { FailedFileResponse } from '../../types/api';
 import { 
   AlertTriangle, 
-  Loader2, 
   FileWarning, 
   RefreshCcw, 
   LifeBuoy, 
   HardDrive,
-  Clock
+  Clock,
+  CheckCircle2
 } from 'lucide-react';
 
 const FailedQueue: React.FC = () => {
-  const { user } = useAuth();
   const navigate = useNavigate();
-  const [failedFiles, setFailedFiles] = useState<FailedFileResponse[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  const isBO = user?.roles.includes('ROLE_BO');
-
-  const fetchFailed = async () => {
-    setLoading(true);
-    try {
-      // ✅ Routage en minuscules [controller]
+  // 🔥 SRE Standard: Utilisation de TanStack Query avec Polling toutes les 15s
+  const { data: failedFiles = [], isLoading, isError, refetch, isFetching } = useQuery({
+    queryKey: ['failed-files'],
+    queryFn: async () => {
       const response = await api.get<FailedFileResponse[]>('/api/v1/document/failed');
-      setFailedFiles(response.data);
-      setError(null);
-    } catch (err: any) {
-      setError("Impossible d'accéder au dossier des échecs système.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (isBO) fetchFailed();
-  }, [isBO]);
-
-  if (!isBO) {
-    return (
-      <div className="p-8 text-center bg-rose-500/5 border border-rose-500/20 rounded-xl text-rose-400">
-        <AlertTriangle className="w-12 h-12 mx-auto mb-4" />
-        <h2 className="text-xl font-bold">Accès Restreint</h2>
-        <p className="mt-2">Seul le Bureau d'Ordre peut effectuer des opérations de récupération système.</p>
-      </div>
-    );
-  }
+      return response.data;
+    },
+    refetchInterval: 15000, // L'agent sera notifié presque en temps réel d'un crash OCR
+  });
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -57,28 +33,36 @@ const FailedQueue: React.FC = () => {
           <h1 className="text-2xl font-bold text-white flex items-center gap-3">
             <LifeBuoy className="w-7 h-7 text-rose-500" />
             Centre de Récupération
+            {isFetching && !isLoading && (
+              <span className="flex h-2 w-2 relative ml-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+              </span>
+            )}
           </h1>
           <p className="text-slate-400 text-sm">Fichiers rejetés par le moteur OCR ou corrompus lors du transfert.</p>
         </div>
         
         <button 
-          onClick={fetchFailed}
+          onClick={() => refetch()}
           className="p-2 text-slate-400 hover:text-white transition-colors"
           title="Scanner le dossier failed"
         >
-          <RefreshCcw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCcw className={`w-5 h-5 ${isFetching ? 'animate-spin text-rose-500' : ''}`} />
         </button>
       </div>
 
-      {loading ? (
-        <div className="flex flex-col items-center justify-center h-64 border border-slate-800 border-dashed rounded-xl">
-          <Loader2 className="w-10 h-10 animate-spin text-rose-500 mb-4" />
-          <p className="text-slate-500 font-mono text-xs uppercase tracking-widest">Scan du volume /failed...</p>
+      {/* 🛡️ SRE Standard: Skeleton State au lieu du spinner bloquant */}
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-40 bg-slate-800/50 animate-pulse rounded-xl border border-slate-800/30"></div>
+          ))}
         </div>
-      ) : error ? (
+      ) : isError ? (
         <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-lg text-rose-400 text-sm flex items-center gap-3">
           <AlertTriangle className="w-5 h-5" />
-          {error}
+          Impossible d'accéder au dossier des échecs système partagé.
         </div>
       ) : failedFiles.length === 0 ? (
         <div className="p-16 text-center border border-slate-800 border-dashed rounded-xl bg-slate-900/10">
@@ -129,12 +113,5 @@ const FailedQueue: React.FC = () => {
     </div>
   );
 };
-
-// Import manquant pour l'état vide (simulé pour la lisibilité)
-const CheckCircle2 = ({ className }: { className: string }) => (
-  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-  </svg>
-);
 
 export default FailedQueue;

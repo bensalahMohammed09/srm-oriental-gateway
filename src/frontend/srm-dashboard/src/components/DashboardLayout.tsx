@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { useNavigate, useLocation } from 'react-router-dom'; // <-- NOUVEAUX IMPORTS
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   Inbox, 
@@ -10,33 +10,34 @@ import {
   Menu,
   X,
   User as UserIcon,
-  ChevronRight
+  ChevronRight,
+  CheckSquare // <-- Nouvel import pour l'icône Validations
 } from 'lucide-react';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
   title: string;
-  // onNavigate et currentPath ont été supprimés car React Router gère cela maintenant !
 }
 
-const DashboardLayout: React.FC<DashboardLayoutProps> = ({ 
-  children, 
-  title 
-}) => {
+const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, title }) => {
   const { user, logout } = useAuth();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-  
-  // Hooks de React Router
   const navigate = useNavigate();
   const location = useLocation();
 
-  // ✅ Chemins mis à jour avec le "/" au début pour correspondre à App.tsx
   const navItems = [
     { 
       label: 'Tableau de bord', 
       icon: LayoutDashboard, 
       path: '/dashboard', 
       roles: ['ROLE_ADMIN', 'ROLE_FINANCE'] 
+    },
+    // 🌟 NOUVEAU LIEN : VALIDATIONS
+    { 
+      label: 'Validations en attente', 
+      icon: CheckSquare, 
+      path: '/approvals/inbox', 
+      roles: ['ROLE_FINANCE', 'ROLE_TECH', 'ROLE_ADMIN'] 
     },
     { 
       label: 'Flux à Indexer', 
@@ -58,19 +59,17 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
     }
   ];
 
-  // Filtrage selon les rôles de l'utilisateur connecté
   const menuItems = navItems.filter(item => 
     item.roles.some(role => user?.roles.includes(role))
   );
 
   const handleNav = (path: string) => {
-    navigate(path); // Utilisation de React Router pour naviguer
+    navigate(path);
     setIsMobileOpen(false);
   };
 
   return (
     <div className="flex h-screen bg-[#020617] text-slate-200 overflow-hidden font-sans">
-      {/* SIDEBAR DESKTOP */}
       <aside className="hidden lg:flex w-72 flex-col border-r border-slate-800/60 bg-[#020617] z-30">
         <div className="p-8">
           <div className="flex items-center gap-3 group cursor-pointer">
@@ -86,9 +85,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
         <nav className="flex-1 px-4 space-y-1.5">
           {menuItems.map((item) => {
-            // Utilisation de location.pathname pour savoir si on est sur la page active
             const isActive = location.pathname.startsWith(item.path);
-            
             return (
               <button
                 key={item.path}
@@ -109,7 +106,6 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           })}
         </nav>
 
-        {/* PROFILE & LOGOUT */}
         <div className="p-6 border-t border-slate-800/60">
           <div className="flex items-center gap-4 mb-6 px-2">
             <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-blue-400 shadow-inner">
@@ -130,9 +126,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
         </div>
       </aside>
 
-      {/* MAIN CONTENT AREA */}
       <main className="flex-1 flex flex-col min-w-0 bg-[#020617] relative">
-        {/* HEADER */}
         <header className="h-20 border-b border-slate-800/60 bg-[#020617]/80 backdrop-blur-xl flex items-center justify-between px-8 z-20">
           <div className="flex items-center gap-4">
             <button onClick={() => setIsMobileOpen(true)} className="lg:hidden p-2 text-slate-400">
@@ -156,7 +150,6 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           </div>
         </header>
 
-        {/* CONTENT */}
         <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
           <div className="max-w-[1600px] mx-auto">
             {children}
@@ -164,7 +157,6 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
         </div>
       </main>
 
-      {/* MOBILE OVERLAY */}
       {isMobileOpen && (
         <div className="fixed inset-0 z-[100] lg:hidden">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsMobileOpen(false)} />

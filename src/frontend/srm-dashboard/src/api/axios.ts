@@ -33,6 +33,18 @@ api.interceptors.response.use(
     // Affiche le JSON pur dans la console
     console.log(JSON.stringify(logEvent));
 
+    // 🌟 Connexion avec ton ExceptionMiddleware.cs !
+    // Si le backend renvoie un ProblemDetails (RFC 7807), on extrait le message proprement.
+    // Cela permet au Front-end de juste faire `toast.error(err.message)`
+    if (error.response?.data) {
+      const problemDetails = error.response.data;
+      if (problemDetails.detail) {
+        error.message = problemDetails.detail;
+      } else if (problemDetails.title) {
+        error.message = problemDetails.title;
+      }
+    }
+
     return Promise.reject(error);
   }
 );
