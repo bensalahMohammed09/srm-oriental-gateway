@@ -11,8 +11,8 @@ namespace Srm.Gateway.Infrastructure.Data
     {
         public static async Task SeedRolesAndAdminAsync(IServiceProvider serviceProvider)
         {
-            var roleManager = serviceProvider.GetRequiredService<RoleManager<IdentityRole>>();
-            var userManager = serviceProvider.GetRequiredService<UserManager<IdentityUser>>();
+            var roleManager = serviceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
+            var userManager = serviceProvider.GetRequiredService<UserManager<IdentityUser<Guid>>>();
 
             string[] roles = { "ROLE_ADMIN", "ROLE_BO", "ROLE_FINANCE", "ROLE_TECH" };
 
@@ -20,7 +20,7 @@ namespace Srm.Gateway.Infrastructure.Data
             {
                 if (!await roleManager.RoleExistsAsync(roleName))
                 {
-                    await roleManager.CreateAsync(new IdentityRole(roleName));
+                    await roleManager.CreateAsync(new IdentityRole<Guid>(roleName));
                 }
             }
 
@@ -43,7 +43,7 @@ namespace Srm.Gateway.Infrastructure.Data
 
                 if (user == null)
                 {
-                    var newUser = new IdentityUser
+                    var newUser = new IdentityUser<Guid>
                     {
                         UserName = email,
                         Email = email,

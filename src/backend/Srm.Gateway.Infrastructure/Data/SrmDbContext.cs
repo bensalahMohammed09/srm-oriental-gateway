@@ -2,15 +2,15 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Srm.Gateway.Domain.Entities;
+using System;
 
 namespace Srm.Gateway.Infrastructure.Data;
 
-public class SrmDbContext : IdentityDbContext<IdentityUser>
+public class SrmDbContext : IdentityDbContext<IdentityUser<Guid>, IdentityRole<Guid>, Guid>
 {
     public SrmDbContext(DbContextOptions<SrmDbContext> options) : base(options) { }
 
     public DbSet<Document> Documents { get; set; }
-    // 🗑️ SUPPRIMÉ : public DbSet<OcrMetadata> Metadata { get; set; } (On n'en a plus besoin !)
     public DbSet<Status> Statuses { get; set; }
     public DbSet<Category> Categories { get; set; }
     public DbSet<Workflow> Workflows { get; set; }
@@ -20,40 +20,36 @@ public class SrmDbContext : IdentityDbContext<IdentityUser>
     {
         base.OnModelCreating(modelBuilder);
 
-        // --- Mapping Identity en snake_case (Standard SRE) ---
-        modelBuilder.Entity<IdentityUser>().ToTable("identity_users");
-        modelBuilder.Entity<IdentityRole>().ToTable("identity_roles");
-        modelBuilder.Entity<IdentityUserRole<string>>().ToTable("identity_user_roles");
-        modelBuilder.Entity<IdentityUserClaim<string>>().ToTable("identity_user_claims");
-        modelBuilder.Entity<IdentityUserLogin<string>>().ToTable("identity_user_logins");
-        modelBuilder.Entity<IdentityRoleClaim<string>>().ToTable("identity_role_claims");
-        modelBuilder.Entity<IdentityUserToken<string>>().ToTable("identity_user_tokens");
+        // 🌟 LE FIX MAGIQUE POUR POSTGRESQL QUE TU AVAIS OUBLIÉ 🌟
+        // Force PostgreSQL à mettre une valeur par défaut pour TOUTES les colonnes RowVersion
+        // Cela empêche le crash 23502 (NOT NULL constraint) lors du DataSeeder
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            var rowVersionProp = entityType.FindProperty("RowVersion");
+            if (rowVersionProp != null && rowVersionProp.ClrType == typeof(byte[]))
+            {
+                rowVersionProp.SetDefaultValueSql("'\\x0000000000000000'");
+            }
+        }
 
-        // --- Tes mappings existants ---
-        modelBuilder.Entity<Category>().ToTable("categories");
-        modelBuilder.Entity<Status>().ToTable("statuses");
-        modelBuilder.Entity<Workflow>().ToTable("workflows");
-        modelBuilder.Entity<AuditLog>().ToTable("audit_logs");
-        // 🗑️ SUPPRIMÉ : modelBuilder.Entity<OcrMetadata>().ToTable("ocr_metadata");
-
-        // 🌟 NOUVEAU : Configuration avancée de l'entité Document (JSONB + GIN)
+        // Configuration avancée de l'entité Document (JSONB + GIN)
         modelBuilder.Entity<Document>(entity =>
         {
             entity.ToTable("documents");
             entity.HasIndex(d => d.Reference).IsUnique();
 
             // 1. On indique que la propriété Metadata (le Dictionnaire) doit être stockée sous forme de JSON
-            entity.OwnsOne(d => d.Metadata, builder =>
-            {
-                builder.ToJson();
-            });
+            entity.Property(d => d.Metadata)
+                   .HasColumnType("jsonb");
 
-            // 2. On crée l'Index GIN pour que PostgreSQL puisse chercher instantanément dans le JSON
-            // On utilise "Metadata" (string) car c'est une propriété de navigation ("Owned type") dans EF Core
+            // 2. Configuration stricte du jeton de concurrence
+            entity.Property(d => d.RowVersion).IsRowVersion();
+
+            // 3. On crée l'Index GIN pour que PostgreSQL puisse chercher instantanément dans le JSON
             entity.HasIndex("Metadata").HasMethod("gin");
         });
 
-        // --- Relations existantes (Inchangées) ---
+        // --- Relations existantes ---
         modelBuilder.Entity<Workflow>()
             .HasOne(w => w.Document)
             .WithMany(d => d.Workflows)
@@ -61,7 +57,5 @@ public class SrmDbContext : IdentityDbContext<IdentityUser>
             .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<Status>().HasIndex(s => s.Code).IsUnique();
-
-        // 🗑️ SUPPRIMÉ : La relation HasOne/WithMany pour OcrMetadata a été retirée.
     }
 }

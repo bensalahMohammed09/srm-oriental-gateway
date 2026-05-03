@@ -5,95 +5,97 @@ using Srm.Gateway.Domain.Entities;
 using System.Security.Claims;
 using System.Text.Json;
 
-namespace Srm.Gateway.Infrastructure.Interceptors
+namespace Srm.Gateway.Infrastructure.Interceptors;
+
+public class AuditInterceptor(IHttpContextAccessor httpContextAccessor) : SaveChangesInterceptor
 {
-    public class AuditInterceptor : SaveChangesInterceptor
+    private readonly IHttpContextAccessor _httpContextAccessor = httpContextAccessor;
+
+    public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+        DbContextEventData eventData,
+        InterceptionResult<int> result,
+        CancellationToken cancellationToken = default)
     {
-        private readonly IHttpContextAccessor _httpContextAccessor;
+        var context = eventData.Context;
+        if (context == null) return base.SavingChangesAsync(eventData, result, cancellationToken);
 
-        public AuditInterceptor(IHttpContextAccessor httpContextAccessor)
+        // Identify the user making the change
+        var userIdClaim = _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        Guid? currentUserId = null;
+
+        if (!string.IsNullOrEmpty(userIdClaim) && Guid.TryParse(userIdClaim, out var parsedGuid))
         {
-            _httpContextAccessor = httpContextAccessor;
+            currentUserId = parsedGuid;
         }
 
-        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
-            DbContextEventData eventData,
-            InterceptionResult<int> result,
-            CancellationToken cancellationToken = default)
+        // Track Added, Modified, or Deleted entities (excluding logs)
+        var entries = context.ChangeTracker.Entries()
+            .Where(e => e.Entity is not AuditLog &&
+                       (e.State == EntityState.Added || e.State == EntityState.Modified || e.State == EntityState.Deleted))
+            .ToList();
+
+        foreach (var entry in entries)
         {
-            var context = eventData.Context;
-            if (context == null) return base.SavingChangesAsync(eventData, result, cancellationToken);
+            // Extract Primary Key
+            var pk = entry.Metadata.FindPrimaryKey();
+            var entityId = pk != null
+                ? string.Join("-", pk.Properties.Select(p => entry.Property(p.Name).CurrentValue))
+                : "Unknown";
 
-            // 🟢 RÉPARATION DU TYPAGE : Extraction et tentative de parsing en Guid
-            var userIdClaim = _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            Guid? currentUserId = null;
-
-            if (Guid.TryParse(userIdClaim, out var parsedGuid))
+            var auditLog = new AuditLog
             {
-                currentUserId = parsedGuid;
-            }
+                Id = Guid.NewGuid(),
+                EntityName = entry.Entity.GetType().Name,
+                EntityId = entityId,
+                Action = entry.State.ToString(),
+                CreatedAt = DateTime.UtcNow,
+                UserId = currentUserId,
+                Changes = SerializeChanges(entry)
+            };
 
-            var entries = context.ChangeTracker.Entries()
-                .Where(e => e.Entity is not AuditLog &&
-                           (e.State == EntityState.Added || e.State == EntityState.Modified || e.State == EntityState.Deleted))
-                .ToList();
-
-            foreach (var entry in entries)
-            {
-                // ✅ RÉPARATION CRITIQUE : Récupération dynamique et sécurisée de la clé primaire (simple ou composite)
-                var pk = entry.Metadata.FindPrimaryKey();
-                var entityId = "Unknown";
-
-                if (pk != null)
-                {
-                    var pkValues = pk.Properties.Select(p => entry.Property(p.Name).CurrentValue?.ToString());
-                    entityId = string.Join("-", pkValues);
-                }
-
-                var auditLog = new AuditLog
-                {
-                    Id = Guid.NewGuid(),
-                    EntityName = entry.Entity.GetType().Name,
-                    EntityId = entityId,
-                    Action = entry.State.ToString(),
-                    CreatedAt = DateTime.UtcNow,
-                    UserId = currentUserId,
-                    Changes = SerializeChanges(entry)
-                };
-
-                context.Set<AuditLog>().Add(auditLog);
-            }
-
-            return base.SavingChangesAsync(eventData, result, cancellationToken);
+            context.Set<AuditLog>().Add(auditLog);
         }
 
-        private string SerializeChanges(Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry entry)
+        return base.SavingChangesAsync(eventData, result, cancellationToken);
+    }
+
+    private string SerializeChanges(Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry entry)
+    {
+        var changes = new Dictionary<string, object?>();
+        var options = new JsonSerializerOptions
         {
-            var changes = new Dictionary<string, object?>();
-            var options = new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+            WriteIndented = false
+        };
 
-            if (entry.State == EntityState.Added)
+        if (entry.State == EntityState.Added)
+        {
+            foreach (var prop in entry.CurrentValues.Properties)
             {
-                foreach (var prop in entry.CurrentValues.Properties)
-                {
-                    changes[prop.Name] = entry.CurrentValues[prop];
-                }
+                changes[prop.Name] = entry.CurrentValues[prop];
             }
-            else if (entry.State == EntityState.Modified)
-            {
-                foreach (var prop in entry.OriginalValues.Properties)
-                {
-                    var original = entry.OriginalValues[prop];
-                    var current = entry.CurrentValues[prop];
-
-                    if (!Equals(original, current))
-                    {
-                        changes[prop.Name] = new { From = original, To = current };
-                    }
-                }
-            }
-
-            return JsonSerializer.Serialize(changes, options);
         }
+        else if (entry.State == EntityState.Modified)
+        {
+            foreach (var prop in entry.OriginalValues.Properties)
+            {
+                var original = entry.OriginalValues[prop];
+                var current = entry.CurrentValues[prop];
+
+                if (!Equals(original, current))
+                {
+                    changes[prop.Name] = new { From = original, To = current };
+                }
+            }
+        }
+        else if (entry.State == EntityState.Deleted)
+        {
+            foreach (var prop in entry.OriginalValues.Properties)
+            {
+                changes[prop.Name] = entry.OriginalValues[prop];
+            }
+        }
+
+        return JsonSerializer.Serialize(changes, options);
     }
 }

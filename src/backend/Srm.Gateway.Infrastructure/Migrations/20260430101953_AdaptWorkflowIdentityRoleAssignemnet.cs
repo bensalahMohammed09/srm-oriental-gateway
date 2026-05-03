@@ -1,17 +1,58 @@
 ﻿using System;
+using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
+using Srm.Gateway.Domain.Entities;
 
 #nullable disable
 
 namespace Srm.Gateway.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialIdentitySetup : Migration
+    public partial class AdaptWorkflowIdentityRoleAssignemnet : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.CreateTable(
+                name: "AspNetRoles",
+                columns: table => new
+                {
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    name = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    normalized_name = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    concurrency_stamp = table.Column<string>(type: "text", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_asp_net_roles", x => x.id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "AspNetUsers",
+                columns: table => new
+                {
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    user_name = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    normalized_user_name = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    email = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    normalized_email = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    email_confirmed = table.Column<bool>(type: "boolean", nullable: false),
+                    password_hash = table.Column<string>(type: "text", nullable: true),
+                    security_stamp = table.Column<string>(type: "text", nullable: true),
+                    concurrency_stamp = table.Column<string>(type: "text", nullable: true),
+                    phone_number = table.Column<string>(type: "text", nullable: true),
+                    phone_number_confirmed = table.Column<bool>(type: "boolean", nullable: false),
+                    two_factor_enabled = table.Column<bool>(type: "boolean", nullable: false),
+                    lockout_end = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    lockout_enabled = table.Column<bool>(type: "boolean", nullable: false),
+                    access_failed_count = table.Column<int>(type: "integer", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_asp_net_users", x => x.id);
+                });
+
             migrationBuilder.CreateTable(
                 name: "audit_logs",
                 columns: table => new
@@ -37,50 +78,12 @@ namespace Srm.Gateway.Infrastructure.Migrations
                     name = table.Column<string>(type: "text", nullable: false),
                     description = table.Column<string>(type: "text", nullable: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    row_version = table.Column<byte[]>(type: "bytea", rowVersion: true, nullable: false, defaultValueSql: "'\\x0000000000000000'")
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_categories", x => x.id);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "identity_roles",
-                columns: table => new
-                {
-                    id = table.Column<string>(type: "text", nullable: false),
-                    name = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
-                    normalized_name = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
-                    concurrency_stamp = table.Column<string>(type: "text", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("pk_identity_roles", x => x.id);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "identity_users",
-                columns: table => new
-                {
-                    id = table.Column<string>(type: "text", nullable: false),
-                    user_name = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
-                    normalized_user_name = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
-                    email = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
-                    normalized_email = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
-                    email_confirmed = table.Column<bool>(type: "boolean", nullable: false),
-                    password_hash = table.Column<string>(type: "text", nullable: true),
-                    security_stamp = table.Column<string>(type: "text", nullable: true),
-                    concurrency_stamp = table.Column<string>(type: "text", nullable: true),
-                    phone_number = table.Column<string>(type: "text", nullable: true),
-                    phone_number_confirmed = table.Column<bool>(type: "boolean", nullable: false),
-                    two_factor_enabled = table.Column<bool>(type: "boolean", nullable: false),
-                    lockout_end = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
-                    lockout_enabled = table.Column<bool>(type: "boolean", nullable: false),
-                    access_failed_count = table.Column<int>(type: "integer", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("pk_identity_users", x => x.id);
                 });
 
             migrationBuilder.CreateTable(
@@ -91,7 +94,8 @@ namespace Srm.Gateway.Infrastructure.Migrations
                     name = table.Column<string>(type: "text", nullable: false),
                     code = table.Column<string>(type: "text", nullable: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    row_version = table.Column<byte[]>(type: "bytea", rowVersion: true, nullable: false, defaultValueSql: "'\\x0000000000000000'")
                 },
                 constraints: table =>
                 {
@@ -99,107 +103,107 @@ namespace Srm.Gateway.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "identity_role_claims",
+                name: "AspNetRoleClaims",
                 columns: table => new
                 {
                     id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    role_id = table.Column<string>(type: "text", nullable: false),
+                    role_id = table.Column<Guid>(type: "uuid", nullable: false),
                     claim_type = table.Column<string>(type: "text", nullable: true),
                     claim_value = table.Column<string>(type: "text", nullable: true)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("pk_identity_role_claims", x => x.id);
+                    table.PrimaryKey("pk_asp_net_role_claims", x => x.id);
                     table.ForeignKey(
-                        name: "fk_identity_role_claims_identity_roles_role_id",
+                        name: "fk_asp_net_role_claims_asp_net_roles_role_id",
                         column: x => x.role_id,
-                        principalTable: "identity_roles",
+                        principalTable: "AspNetRoles",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
-                name: "identity_user_claims",
+                name: "AspNetUserClaims",
                 columns: table => new
                 {
                     id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    user_id = table.Column<string>(type: "text", nullable: false),
+                    user_id = table.Column<Guid>(type: "uuid", nullable: false),
                     claim_type = table.Column<string>(type: "text", nullable: true),
                     claim_value = table.Column<string>(type: "text", nullable: true)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("pk_identity_user_claims", x => x.id);
+                    table.PrimaryKey("pk_asp_net_user_claims", x => x.id);
                     table.ForeignKey(
-                        name: "fk_identity_user_claims_identity_users_user_id",
+                        name: "fk_asp_net_user_claims_asp_net_users_user_id",
                         column: x => x.user_id,
-                        principalTable: "identity_users",
+                        principalTable: "AspNetUsers",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
-                name: "identity_user_logins",
+                name: "AspNetUserLogins",
                 columns: table => new
                 {
                     login_provider = table.Column<string>(type: "text", nullable: false),
                     provider_key = table.Column<string>(type: "text", nullable: false),
                     provider_display_name = table.Column<string>(type: "text", nullable: true),
-                    user_id = table.Column<string>(type: "text", nullable: false)
+                    user_id = table.Column<Guid>(type: "uuid", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("pk_identity_user_logins", x => new { x.login_provider, x.provider_key });
+                    table.PrimaryKey("pk_asp_net_user_logins", x => new { x.login_provider, x.provider_key });
                     table.ForeignKey(
-                        name: "fk_identity_user_logins_identity_users_user_id",
+                        name: "fk_asp_net_user_logins_asp_net_users_user_id",
                         column: x => x.user_id,
-                        principalTable: "identity_users",
+                        principalTable: "AspNetUsers",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
-                name: "identity_user_roles",
+                name: "AspNetUserRoles",
                 columns: table => new
                 {
-                    user_id = table.Column<string>(type: "text", nullable: false),
-                    role_id = table.Column<string>(type: "text", nullable: false)
+                    user_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    role_id = table.Column<Guid>(type: "uuid", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("pk_identity_user_roles", x => new { x.user_id, x.role_id });
+                    table.PrimaryKey("pk_asp_net_user_roles", x => new { x.user_id, x.role_id });
                     table.ForeignKey(
-                        name: "fk_identity_user_roles_identity_roles_role_id",
+                        name: "fk_asp_net_user_roles_asp_net_roles_role_id",
                         column: x => x.role_id,
-                        principalTable: "identity_roles",
+                        principalTable: "AspNetRoles",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "fk_identity_user_roles_identity_users_user_id",
+                        name: "fk_asp_net_user_roles_asp_net_users_user_id",
                         column: x => x.user_id,
-                        principalTable: "identity_users",
+                        principalTable: "AspNetUsers",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
-                name: "identity_user_tokens",
+                name: "AspNetUserTokens",
                 columns: table => new
                 {
-                    user_id = table.Column<string>(type: "text", nullable: false),
+                    user_id = table.Column<Guid>(type: "uuid", nullable: false),
                     login_provider = table.Column<string>(type: "text", nullable: false),
                     name = table.Column<string>(type: "text", nullable: false),
                     value = table.Column<string>(type: "text", nullable: true)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("pk_identity_user_tokens", x => new { x.user_id, x.login_provider, x.name });
+                    table.PrimaryKey("pk_asp_net_user_tokens", x => new { x.user_id, x.login_provider, x.name });
                     table.ForeignKey(
-                        name: "fk_identity_user_tokens_identity_users_user_id",
+                        name: "fk_asp_net_user_tokens_asp_net_users_user_id",
                         column: x => x.user_id,
-                        principalTable: "identity_users",
+                        principalTable: "AspNetUsers",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -212,10 +216,13 @@ namespace Srm.Gateway.Infrastructure.Migrations
                     reference = table.Column<string>(type: "text", nullable: false),
                     supplier_name = table.Column<string>(type: "text", nullable: false),
                     total_amount = table.Column<decimal>(type: "numeric", nullable: true),
+                    source_file = table.Column<string>(type: "text", nullable: true),
                     status_id = table.Column<Guid>(type: "uuid", nullable: false),
                     category_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    metadata = table.Column<Dictionary<string, DocumentFieldValue>>(type: "jsonb", nullable: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    row_version = table.Column<byte[]>(type: "bytea", rowVersion: true, nullable: false, defaultValueSql: "'\\x0000000000000000'")
                 },
                 constraints: table =>
                 {
@@ -234,42 +241,20 @@ namespace Srm.Gateway.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "ocr_metadata",
-                columns: table => new
-                {
-                    id = table.Column<Guid>(type: "uuid", nullable: false),
-                    document_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    key = table.Column<string>(type: "text", nullable: false),
-                    value = table.Column<string>(type: "text", nullable: false),
-                    confidence = table.Column<double>(type: "double precision", nullable: false),
-                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("pk_ocr_metadata", x => x.id);
-                    table.ForeignKey(
-                        name: "fk_ocr_metadata_documents_document_id",
-                        column: x => x.document_id,
-                        principalTable: "documents",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "workflows",
                 columns: table => new
                 {
                     id = table.Column<Guid>(type: "uuid", nullable: false),
                     document_id = table.Column<Guid>(type: "uuid", nullable: false),
                     step_name = table.Column<string>(type: "text", nullable: false),
-                    assigned_role_id = table.Column<string>(type: "text", nullable: false),
+                    assigned_role_id = table.Column<Guid>(type: "uuid", nullable: true),
                     current_status = table.Column<string>(type: "text", nullable: false),
                     comment = table.Column<string>(type: "text", nullable: true),
-                    validated_by_user_id = table.Column<string>(type: "text", nullable: true),
+                    validated_by_user_id = table.Column<Guid>(type: "uuid", nullable: true),
                     validated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    row_version = table.Column<byte[]>(type: "bytea", rowVersion: true, nullable: false, defaultValueSql: "'\\x0000000000000000'")
                 },
                 constraints: table =>
                 {
@@ -283,20 +268,62 @@ namespace Srm.Gateway.Infrastructure.Migrations
                     table.ForeignKey(
                         name: "fk_workflows_roles_assigned_role_id",
                         column: x => x.assigned_role_id,
-                        principalTable: "identity_roles",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
+                        principalTable: "AspNetRoles",
+                        principalColumn: "id");
                     table.ForeignKey(
                         name: "fk_workflows_users_validated_by_user_id",
                         column: x => x.validated_by_user_id,
-                        principalTable: "identity_users",
+                        principalTable: "AspNetUsers",
                         principalColumn: "id");
                 });
+
+            migrationBuilder.CreateIndex(
+                name: "ix_asp_net_role_claims_role_id",
+                table: "AspNetRoleClaims",
+                column: "role_id");
+
+            migrationBuilder.CreateIndex(
+                name: "RoleNameIndex",
+                table: "AspNetRoles",
+                column: "normalized_name",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "ix_asp_net_user_claims_user_id",
+                table: "AspNetUserClaims",
+                column: "user_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_asp_net_user_logins_user_id",
+                table: "AspNetUserLogins",
+                column: "user_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_asp_net_user_roles_role_id",
+                table: "AspNetUserRoles",
+                column: "role_id");
+
+            migrationBuilder.CreateIndex(
+                name: "EmailIndex",
+                table: "AspNetUsers",
+                column: "normalized_email");
+
+            migrationBuilder.CreateIndex(
+                name: "UserNameIndex",
+                table: "AspNetUsers",
+                column: "normalized_user_name",
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "ix_documents_category_id",
                 table: "documents",
                 column: "category_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_documents_metadata",
+                table: "documents",
+                column: "metadata")
+                .Annotation("Npgsql:IndexMethod", "gin");
 
             migrationBuilder.CreateIndex(
                 name: "ix_documents_reference",
@@ -308,48 +335,6 @@ namespace Srm.Gateway.Infrastructure.Migrations
                 name: "ix_documents_status_id",
                 table: "documents",
                 column: "status_id");
-
-            migrationBuilder.CreateIndex(
-                name: "ix_identity_role_claims_role_id",
-                table: "identity_role_claims",
-                column: "role_id");
-
-            migrationBuilder.CreateIndex(
-                name: "RoleNameIndex",
-                table: "identity_roles",
-                column: "normalized_name",
-                unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "ix_identity_user_claims_user_id",
-                table: "identity_user_claims",
-                column: "user_id");
-
-            migrationBuilder.CreateIndex(
-                name: "ix_identity_user_logins_user_id",
-                table: "identity_user_logins",
-                column: "user_id");
-
-            migrationBuilder.CreateIndex(
-                name: "ix_identity_user_roles_role_id",
-                table: "identity_user_roles",
-                column: "role_id");
-
-            migrationBuilder.CreateIndex(
-                name: "EmailIndex",
-                table: "identity_users",
-                column: "normalized_email");
-
-            migrationBuilder.CreateIndex(
-                name: "UserNameIndex",
-                table: "identity_users",
-                column: "normalized_user_name",
-                unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "ix_ocr_metadata_document_id",
-                table: "ocr_metadata",
-                column: "document_id");
 
             migrationBuilder.CreateIndex(
                 name: "ix_statuses_code",
@@ -377,25 +362,22 @@ namespace Srm.Gateway.Infrastructure.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
+                name: "AspNetRoleClaims");
+
+            migrationBuilder.DropTable(
+                name: "AspNetUserClaims");
+
+            migrationBuilder.DropTable(
+                name: "AspNetUserLogins");
+
+            migrationBuilder.DropTable(
+                name: "AspNetUserRoles");
+
+            migrationBuilder.DropTable(
+                name: "AspNetUserTokens");
+
+            migrationBuilder.DropTable(
                 name: "audit_logs");
-
-            migrationBuilder.DropTable(
-                name: "identity_role_claims");
-
-            migrationBuilder.DropTable(
-                name: "identity_user_claims");
-
-            migrationBuilder.DropTable(
-                name: "identity_user_logins");
-
-            migrationBuilder.DropTable(
-                name: "identity_user_roles");
-
-            migrationBuilder.DropTable(
-                name: "identity_user_tokens");
-
-            migrationBuilder.DropTable(
-                name: "ocr_metadata");
 
             migrationBuilder.DropTable(
                 name: "workflows");
@@ -404,10 +386,10 @@ namespace Srm.Gateway.Infrastructure.Migrations
                 name: "documents");
 
             migrationBuilder.DropTable(
-                name: "identity_roles");
+                name: "AspNetRoles");
 
             migrationBuilder.DropTable(
-                name: "identity_users");
+                name: "AspNetUsers");
 
             migrationBuilder.DropTable(
                 name: "categories");
