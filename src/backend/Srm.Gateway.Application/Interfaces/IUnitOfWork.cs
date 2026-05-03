@@ -1,19 +1,21 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using Srm.Gateway.Domain.Entities;
 
-namespace Srm.Gateway.Application.Interfaces
+namespace Srm.Gateway.Application.Interfaces;
+
+public interface IUnitOfWork : IDisposable
 {
-    public interface IUnitOfWork : IDisposable
-    {
-        IBaseRepository<Domain.Entities.Document> Documents { get; }
-        IBaseRepository<Domain.Entities.Workflow> Workflows { get; }
-        IBaseRepository<Domain.Entities.Category> Categories { get; }
-        IBaseRepository<Domain.Entities.Status> Statuses { get; }
-        IBaseRepository<Domain.Entities.AuditLog> AuditLogs { get; }
+    // The Generic method handles everything dynamically
+    IBaseRepository<T> Repository<T>() where T : class;
 
-        Task<int> CompleteAsync(); // Sauvegarde transactionnelle
-    }
+    // Shortcuts for commonly used entities
+    IBaseRepository<Document> Documents { get; }
+    IBaseRepository<AuditLog> AuditLogs { get; }
+
+    IBaseRepository<Workflow> Workflows { get; }
+
+    IBaseRepository<Category> Categories { get; }
+    IBaseRepository<Status> Statuses { get; }
+
+
+    Task<int> CompleteAsync();
 }

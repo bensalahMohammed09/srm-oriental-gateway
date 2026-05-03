@@ -1,73 +1,67 @@
 ﻿using FluentValidation;
 using Srm.Gateway.Application.DTOs;
 
-namespace Srm.Gateway.Application.Validators
+namespace Srm.Gateway.Application.Validators;
+
+public class OcrIngestionValidator : AbstractValidator<OcrIngestionRequest>
 {
-    // --- 1. Validateur pour la création (Ingestion OCR) ---
-    public class OcrIngestionValidator : AbstractValidator<OcrIngestionRequest>
+    public OcrIngestionValidator()
     {
-        public OcrIngestionValidator()
-        {
-            RuleFor(x => x.Reference).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.Reference).NotEmpty().MaximumLength(100);
 
-            RuleForEach(x => x.Metadata).ChildRules(meta => {
-                meta.RuleFor(m => m.Key).NotEmpty();
-                // 🌟 CHANGEMENT : On utilise NotNull() car Value est un 'object' maintenant (JSON)
-                meta.RuleFor(m => m.Value).NotNull().WithMessage("La valeur de la métadonnée ne peut pas être nulle.");
-                meta.RuleFor(m => m.Confidence).InclusiveBetween(0, 1);
-            });
-        }
+        RuleForEach(x => x.Metadata).ChildRules(meta => {
+            meta.RuleFor(m => m.Key).NotEmpty();
+            meta.RuleFor(m => m.Value).NotNull().WithMessage("La valeur de la métadonnée ne peut pas être nulle.");
+            meta.RuleFor(m => m.Confidence).InclusiveBetween(0, 1);
+        });
     }
+}
 
-    // --- 2. Validateur pour la validation métier finale du document ---
-    public class DocumentValidationValidator : AbstractValidator<DocumentValidationRequest>
+public class DocumentValidationValidator : AbstractValidator<DocumentValidationRequest>
+{
+    public DocumentValidationValidator()
     {
-        public DocumentValidationValidator()
-        {
-            RuleFor(x => x.CategoryId).NotEmpty();
-            RuleFor(x => x.Reference).NotEmpty();
+        RuleFor(x => x.CategoryId).NotEmpty();
+        RuleFor(x => x.Reference).NotEmpty();
 
-            // 🗑️ SUPPRIMÉ : L'itération sur MetadataCorrections a été retirée 
-            // car le DTO ne gère plus les métadonnées. C'est le rôle de la nouvelle route dédiée !
-        }
+        RuleFor(x => x.RowVersion)
+            .NotEmpty()
+            .WithMessage("Le jeton de concurrence (RowVersion) est obligatoire pour valider le document.");
     }
+}
 
-    // --- 3. 🌟 NOUVEAU : Validateur pour notre route "Clear & Replace" JSONB ---
-    public class UpdateMetadataValidator : AbstractValidator<UpdateMetadataRequest>
+public class UpdateMetadataValidator : AbstractValidator<UpdateMetadataRequest>
+{
+    public UpdateMetadataValidator()
     {
-        public UpdateMetadataValidator()
-        {
-            RuleFor(x => x.NewMetadata)
-                .NotNull()
-                .WithMessage("Le dictionnaire de métadonnées est requis.");
+        RuleFor(x => x.RowVersion)
+            .NotEmpty()
+            .WithMessage("Le jeton de concurrence (RowVersion) est obligatoire pour la mise à jour.");
 
-            // On itère sur le Dictionary<string, MetadataValueDto>
-            RuleForEach(x => x.NewMetadata)
-                .ChildRules(meta => {
-                    // 'meta' représente un KeyValuePair<string, MetadataValueDto>
+        RuleFor(x => x.NewMetadata)
+            .NotNull()
+            .WithMessage("Le dictionnaire de métadonnées est requis.");
 
-                    // Validation de la Clé JSON
-                    meta.RuleFor(m => m.Key)
-                        .NotEmpty()
-                        .WithMessage("La clé de la métadonnée est requise.");
+        RuleForEach(x => x.NewMetadata)
+            .ChildRules(meta => {
+                meta.RuleFor(m => m.Key).NotEmpty().WithMessage("La clé est requise.");
+                meta.RuleFor(m => m.Value).NotNull().WithMessage("L'objet de valeur ne peut pas être nul.");
 
-                    // Sécurité : On s'assure que le Frontend n'a pas envoyé une valeur "null"
-                    meta.RuleFor(m => m.Value)
-                        .NotNull()
-                        .WithMessage("L'objet de valeur ne peut pas être nul.");
-
-                    // Validation à l'intérieur de l'objet MetadataValueDto
-                    meta.When(m => m.Value != null, () =>
-                    {
-                        meta.RuleFor(m => m.Value.Value)
-                            .NotNull()
-                            .WithMessage("Le contenu de la métadonnée ne peut pas être nul.");
-
-                        meta.RuleFor(m => m.Value.Confidence)
-                            .InclusiveBetween(0, 1)
-                            .WithMessage("Le score de confiance doit être compris entre 0 et 1.");
-                    });
+                meta.When(m => m.Value != null, () =>
+                {
+                    meta.RuleFor(m => m.Value.Value).NotNull().WithMessage("Le contenu ne peut pas être nul.");
+                    meta.RuleFor(m => m.Value.Confidence).InclusiveBetween(0, 1).WithMessage("Score entre 0 et 1.");
                 });
-        }
+            });
+    }
+}
+
+public class ManualUploadValidator : AbstractValidator<ManualUploadRequest>
+{
+    public ManualUploadValidator()
+    {
+        RuleFor(x => x.CategoryId).NotEmpty();
+        RuleFor(x => x.Reference).NotEmpty();
+        RuleFor(x => x.TotalAmount).GreaterThanOrEqualTo(0);
     }
 }

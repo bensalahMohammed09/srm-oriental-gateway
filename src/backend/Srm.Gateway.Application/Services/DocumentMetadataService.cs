@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Srm.Gateway.Application.Interfaces;
 using Srm.Gateway.Domain.Entities;
@@ -16,7 +17,6 @@ public class DocumentMetadataService : IDocumentMetadataService
 
     public async Task<Dictionary<string, DocumentFieldValue>?> GetMetadataAsync(Guid documentId)
     {
-        // 🟢 Utilisation propre du Repository via l'Unit Of Work
         var document = await _unitOfWork.Documents.GetByIdAsync(documentId)
             ?? throw new KeyNotFoundException($"Le document avec l'ID {documentId} est introuvable.");
 
@@ -28,10 +28,8 @@ public class DocumentMetadataService : IDocumentMetadataService
         var document = await _unitOfWork.Documents.GetByIdAsync(documentId)
             ?? throw new KeyNotFoundException($"Le document avec l'ID {documentId} est introuvable.");
 
-        // L'approche "Clear & Replace"
         document.Metadata = newMetadata;
 
-        // 🟢 On valide la transaction via l'Unit Of Work (qui appellera SaveChangesAsync sous le capot)
         _unitOfWork.Documents.Update(document);
         await _unitOfWork.CompleteAsync();
     }

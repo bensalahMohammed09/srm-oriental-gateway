@@ -10,80 +10,80 @@ using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Srm.Gateway.Application.Services
+namespace Srm.Gateway.Application.Services;
+
+public class AuthService : IAuthService
 {
-    public class AuthService : IAuthService
+    private readonly UserManager<IdentityUser<Guid>> _userManager;
+    private readonly IConfiguration _configuration;
+
+    public AuthService(UserManager<IdentityUser<Guid>> userManager, IConfiguration configuration)
     {
-        private readonly UserManager<IdentityUser> _userManager;
-        private readonly IConfiguration _configuration;
+        _userManager = userManager;
+        _configuration = configuration;
+    }
 
-        public AuthService(UserManager<IdentityUser> userManager, IConfiguration configuration)
+    public async Task<AuthResult?> LoginAsync(string email, string password)
+    {
+        var user = await _userManager.FindByEmailAsync(email);
+
+        if (user == null || !await _userManager.CheckPasswordAsync(user, password))
         {
-            _userManager = userManager;
-            _configuration = configuration;
+            return null; // Invalid credentials
         }
 
-        public async Task<AuthResult?> LoginAsync(string email, string password)
+        var userRoles = await _userManager.GetRolesAsync(user);
+
+        var authClaims = new List<Claim>
         {
-            var user = await _userManager.FindByEmailAsync(email);
+            new Claim(ClaimTypes.Name, user.UserName!),
+            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+        };
 
-            if (user == null || !await _userManager.CheckPasswordAsync(user, password))
-            {
-                return null; // Invalid credentials
-            }
-
-            var userRoles = await _userManager.GetRolesAsync(user);
-
-            var authClaims = new List<Claim>
-            {
-                new Claim(ClaimTypes.Name, user.UserName!),
-                new Claim(ClaimTypes.NameIdentifier, user.Id),
-                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            };
-
-            foreach (var userRole in userRoles)
-            {
-                authClaims.Add(new Claim(ClaimTypes.Role, userRole));
-            }
-
-            var token = CreateToken(authClaims);
-            var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
-
-            return new AuthResult(tokenString, userRoles);
+        foreach (var userRole in userRoles)
+        {
+            authClaims.Add(new Claim(ClaimTypes.Role, userRole));
         }
 
-        public async Task<RoleAssignmentResult> AssignAdminRoleAsync(string email)
-        {
-            var user = await _userManager.FindByEmailAsync(email);
-            if (user == null)
-                return new RoleAssignmentResult(false, "User not found");
+        var token = CreateToken(authClaims);
+        var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
 
-            var currentRoles = await _userManager.GetRolesAsync(user);
-            if (currentRoles.Contains("ROLE_ADMIN"))
-                return new RoleAssignmentResult(true, "Already has ROLE_ADMIN");
+        // 🌟 FIXED: Returning the strongly-typed record instead of an anonymous object
+        return new AuthResult(tokenString, userRoles);
+    }
 
-            var result = await _userManager.AddToRoleAsync(user, "ROLE_ADMIN");
+    public async Task<RoleAssignmentResult> AssignAdminRoleAsync(string email)
+    {
+        var user = await _userManager.FindByEmailAsync(email);
+        if (user == null)
+            return new RoleAssignmentResult(false, "User not found"); // 🌟 FIXED
 
-            if (result.Succeeded)
-                return new RoleAssignmentResult(true, "ROLE_ADMIN assigned successfully");
+        var currentRoles = await _userManager.GetRolesAsync(user);
+        if (currentRoles.Contains("ROLE_ADMIN"))
+            return new RoleAssignmentResult(true, "Already has ROLE_ADMIN"); // 🌟 FIXED
 
-            return new RoleAssignmentResult(false, "Failed to assign role", result.Errors.Select(e => e.Description));
-        }
+        var result = await _userManager.AddToRoleAsync(user, "ROLE_ADMIN");
 
-        private JwtSecurityToken CreateToken(List<Claim> authClaims)
-        {
-            var secret = _configuration["JwtSettings:Secret"]
-                ?? "SRM_ORIENTAL_SUPER_SECRET_KEY_2026_DO_NOT_SHARE_BY_MOHAMMED";
-            var authSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
+        if (result.Succeeded)
+            return new RoleAssignmentResult(true, "ROLE_ADMIN assigned successfully"); // 🌟 FIXED
 
-            return new JwtSecurityToken(
-                issuer: _configuration["JwtSettings:Issuer"] ?? "srm-gateway",
-                audience: _configuration["JwtSettings:Audience"] ?? "srm-frontend",
-                notBefore: DateTime.UtcNow,
-                expires: DateTime.UtcNow.AddHours(3),
-                claims: authClaims,
-                signingCredentials: new SigningCredentials(authSigningKey, SecurityAlgorithms.HmacSha256)
-            );
-        }
+        return new RoleAssignmentResult(false, "Failed to assign role", result.Errors.Select(e => e.Description)); // 🌟 FIXED
+    }
+
+    private JwtSecurityToken CreateToken(List<Claim> authClaims)
+    {
+        var secret = _configuration["JwtSettings:Secret"]
+            ?? "SRM_ORIENTAL_SUPER_SECRET_KEY_2026_DO_NOT_SHARE_BY_MOHAMMED";
+        var authSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
+
+        return new JwtSecurityToken(
+            issuer: _configuration["JwtSettings:Issuer"] ?? "srm-gateway",
+            audience: _configuration["JwtSettings:Audience"] ?? "srm-frontend",
+            notBefore: DateTime.UtcNow,
+            expires: DateTime.UtcNow.AddHours(3),
+            claims: authClaims,
+            signingCredentials: new SigningCredentials(authSigningKey, SecurityAlgorithms.HmacSha256)
+        );
     }
 }

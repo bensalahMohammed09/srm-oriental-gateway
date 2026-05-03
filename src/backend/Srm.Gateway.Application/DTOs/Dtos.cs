@@ -1,7 +1,5 @@
 ﻿using Microsoft.AspNetCore.Http;
-using System;
-using System.Collections.Generic;
-using System.IO;
+using System.Text.Json.Serialization;
 
 namespace Srm.Gateway.Application.DTOs;
 
@@ -21,13 +19,17 @@ public record MetadataDto(
 
 // --- 2. VALIDATION & MÉTADONNÉES (Agent BO -> API) ---
 public record DocumentValidationRequest(
-    Guid CategoryId,
-    string Reference,
-    decimal TotalAmount
+    [property: JsonPropertyName("categoryId")] Guid CategoryId,
+    [property: JsonPropertyName("supplierName")] string SupplierName,
+    [property: JsonPropertyName("reference")] string Reference,
+    [property: JsonPropertyName("totalAmount")] decimal TotalAmount,
+    [property: JsonPropertyName("newMetadata")] Dictionary<string, MetadataValueDto> NewMetadata,
+    [property: JsonPropertyName("rowVersion")] byte[] RowVersion
 );
 
 public record UpdateMetadataRequest(
-    Dictionary<string, MetadataValueDto> NewMetadata
+    [property: JsonPropertyName("newMetadata")] Dictionary<string, MetadataValueDto> NewMetadata,
+    [property: JsonPropertyName("rowVersion")] byte[] RowVersion
 );
 
 public record MetadataValueDto(
@@ -41,7 +43,8 @@ public record DocumentResponse(
     string Reference,
     string Status,
     string? Category,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    Dictionary<string, string>? CurrentApprovals
 );
 
 public record DocumentDetailsResponse(
@@ -49,17 +52,31 @@ public record DocumentDetailsResponse(
     string Reference,
     string Status,
     string? Category,
+    string? SupplierName,
     decimal? TotalAmount,
     string? SourceFile,
     Dictionary<string, MetadataValueDto> Metadata,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    byte[] RowVersion
+);
+
+public record PagedResult<T>(
+    IEnumerable<T> Items,
+    int TotalRecords,
+    int CurrentPage,
+    int TotalPages
 );
 
 // --- 4. RÉCUPÉRATION ET SAISIE MANUELLE ---
+
+// 🌟 FIX : On ajoute les champs manquants pour que C# reçoive les données de React !
 public record ManualRecoveryRequest(
     string FileName,
     string Reference,
-    decimal TotalAmount
+    string? SupplierName,
+    decimal TotalAmount,
+    Guid CategoryId,
+    Dictionary<string, MetadataValueDto>? Metadata
 );
 
 public record ManualUploadRequest(
@@ -67,7 +84,6 @@ public record ManualUploadRequest(
     string? SupplierName,
     decimal TotalAmount,
     Guid CategoryId,
-    // 🌟 LE VOICI : L'agent peut maintenant envoyer toutes les lignes dynamiques du formulaire
     Dictionary<string, MetadataValueDto>? Metadata
 );
 
@@ -109,6 +125,7 @@ public record CategoryDistributionDto(
 );
 
 public record RecentActivityDto(
+    Guid Id, // 🌟 AJOUTER CECI
     string Reference,
     string SupplierName,
     string Status,
@@ -129,3 +146,14 @@ public record WorkflowStepResponse(
 public record ApprovalRequest(string? Comment);
 
 public record RejectionRequest(string Reason);
+
+public record DocumentIndexationResponse(
+    Guid Id,
+    Guid? CategoryId,
+    string? Reference,
+    string? SupplierName,
+    decimal? TotalAmount,
+    string? SourceFile,
+    byte[] RowVersion,
+    Dictionary<string, MetadataValueDto> Metadata
+);

@@ -1,21 +1,16 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Linq.Expressions;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Linq.Expressions;
 
-namespace Srm.Gateway.Application.Interfaces
+namespace Srm.Gateway.Application.Interfaces;
+
+public interface IBaseRepository<T> where T : class
 {
-    public interface IBaseRepository<T> where T : class
-    {
-        Task<IEnumerable<T>> GetAllAsync();
-        Task<T?> GetByIdAsync(Guid id);
-        Task AddAsync(T entity);
-        void Update(T entity);
-        void Delete(T entity);
+    Task<IEnumerable<T>> GetAllAsync(bool trackChanges = false);
+    Task<T?> GetByIdAsync(Guid id);
+    Task AddAsync(T entity);
+    void Update(T entity);
+    void Delete(T entity);
+    Task<bool> AnyAsync(Expression<Func<T, bool>> predicate);
 
-        Task<bool> AnyAsync(Expression<Func<T, bool>> predicate);
-
-    }
+    // The "Better" replacement for GetQueryable
+    IQueryable<T> FindByCondition(Expression<Func<T, bool>> predicate, bool trackChanges = false);
 }
