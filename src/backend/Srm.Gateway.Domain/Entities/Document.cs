@@ -13,6 +13,8 @@ public class Document : BaseEntity
     public Guid? CategoryId { get; set; }
     public Category? Category { get; set; }
 
+    public int EscalationLevel { get; set; } = 0;
+
     public Dictionary<string, DocumentFieldValue> Metadata { get; set; } = new();
 
 
