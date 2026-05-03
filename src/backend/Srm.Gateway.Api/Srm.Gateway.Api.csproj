@@ -7,6 +7,7 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<PackageReference Include="AutoMapper" Version="16.1.1" />
 		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.2" />
 		<PackageReference Include="Microsoft.AspNetCore.Http" Version="2.3.9" />
 		<PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.2" />
@@ -16,9 +17,9 @@
 		</PackageReference>
 
 		<!-- 🛡️ ALIGNEMENT SRE : Toutes les libs de token sur la même version -->
-		<PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.6.0" />
-		<PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.6.0" />
-		<PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.6.0" />
+		<PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.14.0" />
+		<PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.14.0" />
+		<PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.14.0" />
 
 		<PackageReference Include="prometheus-net.AspNetCore" Version="8.2.1" />
 		<PackageReference Include="Scalar.AspNetCore" Version="2.13.20" />
@@ -30,5 +31,7 @@
 		<ProjectReference Include="..\Srm.Gateway.Application\Srm.Gateway.Application.csproj" />
 		<ProjectReference Include="..\Srm.Gateway.Infrastructure\Srm.Gateway.Infrastructure.csproj" />
 	</ItemGroup>
+
+	<ProjectExtensions><VisualStudio><UserProperties appsettings_1json__JsonSchema="" /></VisualStudio></ProjectExtensions>
 
 </Project>

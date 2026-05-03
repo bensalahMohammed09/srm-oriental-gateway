@@ -1,8 +1,12 @@
-﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using AutoMapper;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides; // 🚀 Ajouté pour le Reverse Proxy
 using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore; // 🚀 Ajouté pour MigrateAsync
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Prometheus;
 using Scalar.AspNetCore;
 using Serilog;
 using Serilog.Events;
@@ -10,14 +14,12 @@ using Serilog.Formatting.Json;
 using Srm.Gateway.Api.Middlewares;
 using Srm.Gateway.Infrastructure;
 using Srm.Gateway.Infrastructure.Data;
-using Srm.Gateway.Application.Services;
-using Srm.Gateway.Application.Interfaces;
 using System.Text;
-using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // --- 1. LOGGING CONFIGURATION (SERILOG) ---
+// Configuration optimisée pour LOKI via Promtail (format JSON)
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
     .Enrich.FromLogContext()
@@ -29,11 +31,20 @@ builder.Host.UseSerilog();
 // --- 2. SERVICE COLLECTION ---
 builder.Services.AddControllers();
 
+// Configuration du Reverse Proxy : Pour récupérer l'IP réelle et le protocole (HTTP/HTTPS)
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    // On vide les réseaux connus car Docker change souvent d'IP interne
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 builder.Services.AddInfrastructure(builder.Configuration);
-builder.Services.AddScoped<IDocumentService, DocumentService>();
+builder.Services.AddAutoMapper(cfg => cfg.AddMaps(typeof(Srm.Gateway.Application.Mappings.DocumentMappingProfile).Assembly));
 
 // A. Identity Bastion
-builder.Services.AddIdentity<IdentityUser, IdentityRole>(options =>
+builder.Services.AddIdentity<IdentityUser<Guid>, IdentityRole<Guid>>(options =>
 {
     options.Password.RequireDigit = true;
     options.Password.RequiredLength = 12;
@@ -53,7 +64,6 @@ builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
     options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-    // 🛡️ CORRECTION .NET 9 : Obligatoire pour écraser le cookie Identity par défaut
     options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
 })
 .AddJwtBearer(options =>
@@ -70,36 +80,20 @@ builder.Services.AddAuthentication(options =>
         ClockSkew = TimeSpan.FromMinutes(1)
     };
 
-    // 🚀 AJOUT SRE : Logging de diagnostic détaillé pour comprendre les 401
+    // 🚀 SRE DIAGNOSTICS : Utile pour Grafana/Loki en cas de 401
     options.Events = new JwtBearerEvents
     {
         OnMessageReceived = context =>
         {
-            Console.WriteLine("[DEBUG-AUTH] Requête reçue sur : " + context.Request.Path);
             if (context.Request.Cookies.TryGetValue("SRM_AUTH_TOKEN", out var token))
             {
-                Console.WriteLine("[DEBUG-AUTH] Cookie 'SRM_AUTH_TOKEN' TROUVÉ ! Longueur : " + token.Length);
                 context.Token = token;
-            }
-            else
-            {
-                Console.WriteLine("[DEBUG-AUTH] ❌ AUCUN Cookie 'SRM_AUTH_TOKEN' trouvé dans la requête !");
             }
             return Task.CompletedTask;
         },
         OnAuthenticationFailed = context =>
         {
-            Console.WriteLine("[DEBUG-AUTH] ❌ ÉCHEC DE L'AUTHENTIFICATION : " + context.Exception.Message);
-            return Task.CompletedTask;
-        },
-        OnTokenValidated = context =>
-        {
-            Console.WriteLine("[DEBUG-AUTH] ✅ TOKEN VALIDÉ AVEC SUCCÈS pour : " + context.Principal?.Identity?.Name);
-            return Task.CompletedTask;
-        },
-        OnChallenge = context =>
-        {
-            Console.WriteLine("[DEBUG-AUTH] ⚠️ 401 CHALLENGE DÉCLENCHÉ : La requête a été rejetée. Raison : " + context.Error + " - " + context.ErrorDescription);
+            Log.Warning("[AUTH] Authentication failed: {Message}", context.Exception.Message);
             return Task.CompletedTask;
         }
     };
@@ -107,7 +101,7 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization();
 
-// 🛡️ CORRECTION SRE : Nginx unifie les ports, on utilise Lax, et on enlève les restrictions "None"
+// 🛡️ REVERSE PROXY SECURITY : Politique des cookies unifiée via Nginx
 builder.Services.Configure<CookiePolicyOptions>(options =>
 {
     options.MinimumSameSitePolicy = SameSiteMode.Lax;
@@ -120,17 +114,16 @@ builder.Services.AddOpenApi(options =>
     {
         document.Servers = new List<OpenApiServer>
         {
-            new OpenApiServer { Url = "http://localhost:5050" }
+            // On pointe vers le port exposé par Nginx (3000 dans ton .env)
+            new OpenApiServer { Url = "http://localhost:3000" }
         };
         return Task.CompletedTask;
     });
 });
 
-// ❌ Nginx s'occupe du reverse proxy. Le bloc AddCors a été SUPPRIMÉ.
-
 var app = builder.Build();
 
-// --- 3. INITIALISATION DES SEEDERS ---
+// --- 3. INITIALISATION (MIGRATIONS & SEEDERS) ---
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
@@ -138,26 +131,35 @@ using (var scope = app.Services.CreateScope())
 
     try
     {
+        Log.Information("🚀 Starting Database Migration...");
+        // 🛠️ AUTOMATIC MIGRATION : Applique les changements de schéma EF Core au démarrage
+        await context.Database.MigrateAsync();
+
+        Log.Information("🌱 Starting Data Seeding...");
         await DataSeeder.SeedLookupDataAsync(context);
         await IdentitySeeder.SeedRolesAndAdminAsync(services);
-        Log.Information("Initial seeding completed successfully.");
+
+        Log.Information("✅ Infrastructure Readiness Check: OK");
     }
     catch (Exception ex)
     {
-        Log.Error(ex, "Initial seeding failed.");
+        Log.Fatal(ex, "❌ Initial database setup failed. Application cannot start.");
+        throw; // Force l'arrêt du conteneur pour que Docker le redémarre (Restart Policy)
     }
 }
 
 // --- 4. MIDDLEWARE PIPELINE ---
-app.UseHttpMetrics();
+
+// Applique les headers X-Forwarded-For avant toute chose
+app.UseForwardedHeaders();
+
+app.UseHttpMetrics(); // Metrics Prometheus
 app.UseMiddleware<ExceptionMiddleware>();
 app.UseSerilogRequestLogging();
 app.UseRouting();
 
-// ❌ app.UseCors() a été SUPPRIMÉ.
-
+// Les cookies et l'auth travaillent maintenant avec les headers de Nginx
 app.UseCookiePolicy();
-
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -169,13 +171,12 @@ if (app.Environment.IsDevelopment())
         options.WithTitle("SRM Oriental Gateway API")
                .WithTheme(ScalarTheme.Mars)
                .WithDefaultHttpClient(ScalarTarget.CSharp, ScalarClient.HttpClient);
-
         options.WithPreferredScheme("http");
     });
 }
 
 app.MapControllers();
-app.MapMetrics();
+app.MapMetrics().AllowAnonymous(); // Endpoint Prometheus sans auth
 
 app.Run();
 
