@@ -37,10 +37,8 @@ WORKDIR /app
 # Mapping to ENV for the application runtime
 ENV ASPNETCORE_ENVIRONMENT=${API_ENV}
 ENV ASPNETCORE_HTTP_PORTS=${API_INTERNAL_PORT}
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1
 
-# Security: Install curl for Healthchecks and clean up cache
-RUN apt-get update && apt-get install -y --no-install-recommends curl \
-    && rm -rf /var/lib/apt/lists/*
 
 # Security: Switch to the built-in non-root 'app' user
 USER app
@@ -51,8 +49,5 @@ COPY --from=build-env --chown=app:app /out .
 # Document the port
 EXPOSE ${API_INTERNAL_PORT}
 
-# Healthcheck detail for Prometheus/Docker monitoring
-HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
-    CMD curl -f http://localhost:${API_INTERNAL_PORT}/health || exit 1
 
 ENTRYPOINT ["dotnet", "Srm.Gateway.Api.dll"]
