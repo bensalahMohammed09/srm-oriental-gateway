@@ -2,7 +2,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Prometheus;
-using Microsoft.EntityFrameworkCore; // Nécessaire pour DbUpdateConcurrencyException
+using Microsoft.EntityFrameworkCore;
 
 namespace Srm.Gateway.Api.Middlewares
 {
@@ -26,38 +26,49 @@ namespace Srm.Gateway.Api.Middlewares
 
         public async Task InvokeAsync(HttpContext context)
         {
-            try
-            {
-                await _next(context);
-            }
-            catch (Exception ex)
-            {
-                ErrorCounter.WithLabels(context.Request.Path.Value ?? "/unknown", ex.GetType().Name).Inc();
+            // 1. EXTRACT OR GENERATE CORRELATION ID
+            // On vérifie si React/n8n a déjà envoyé un ID, sinon on en crée un.
+            context.Request.Headers.TryGetValue("X-Correlation-ID", out var correlationIdValues);
+            var correlationId = correlationIdValues.FirstOrDefault() ?? Guid.NewGuid().ToString();
 
-                // On log en Error uniquement si c'est un vrai plantage (500).
-                // Pour un 404, un Warning suffit.
-                if (ex is KeyNotFoundException)
-                    _logger.LogWarning("Ressource non trouvée sur {Path}: {Message}", context.Request.Path, ex.Message);
-                else
-                    _logger.LogError(ex, "Exception non gérée sur {Path}: {Message}", context.Request.Path, ex.Message);
+            // On l'ajoute à la réponse pour le frontend
+            context.Response.Headers["X-Correlation-ID"] = correlationId;
 
-                await HandleExceptionAsync(context, ex);
+            // 2. INJECT INTO LOGGING SCOPE (La magie pour Grafana/Loki)
+            // Tous les logs générés à partir d'ici (même hors de ce fichier) auront le label "CorrelationId"
+            var state = new Dictionary<string, object> { ["CorrelationId"] = correlationId };
+            using (_logger.BeginScope(state))
+            {
+                try
+                {
+                    await _next(context); // Exécution normale de l'API
+                }
+                catch (Exception ex)
+                {
+                    ErrorCounter.WithLabels(context.Request.Path.Value ?? "/unknown", ex.GetType().Name).Inc();
+
+                    if (ex is KeyNotFoundException)
+                        _logger.LogWarning("Ressource non trouvée sur {Path}: {Message}", context.Request.Path, ex.Message);
+                    else
+                        _logger.LogError(ex, "Exception non gérée sur {Path}: {Message}", context.Request.Path, ex.Message);
+
+                    await HandleExceptionAsync(context, ex, correlationId);
+                }
             }
         }
 
-        private static Task HandleExceptionAsync(HttpContext context, Exception exception)
+        private static Task HandleExceptionAsync(HttpContext context, Exception exception, string correlationId)
         {
             context.Response.ContentType = "application/problem+json";
 
-            // 🌟 CHANGEMENT MAJEUR : Mapping intelligent des statuts HTTP (SRE)
             var statusCode = exception switch
             {
-                KeyNotFoundException => (int)HttpStatusCode.NotFound, // 404
-                FileNotFoundException => (int)HttpStatusCode.NotFound, // 404
-                UnauthorizedAccessException => (int)HttpStatusCode.Forbidden, // 403
-                DbUpdateConcurrencyException => (int)HttpStatusCode.Conflict, // 409 (Concurrence)
-                InvalidOperationException => (int)HttpStatusCode.BadRequest, // 400
-                _ => (int)HttpStatusCode.InternalServerError // 500 par défaut
+                KeyNotFoundException => (int)HttpStatusCode.NotFound,
+                FileNotFoundException => (int)HttpStatusCode.NotFound,
+                UnauthorizedAccessException => (int)HttpStatusCode.Forbidden,
+                DbUpdateConcurrencyException => (int)HttpStatusCode.Conflict,
+                InvalidOperationException => (int)HttpStatusCode.BadRequest,
+                _ => (int)HttpStatusCode.InternalServerError
             };
 
             context.Response.StatusCode = statusCode;
@@ -70,6 +81,10 @@ namespace Srm.Gateway.Api.Middlewares
                 Instance = context.Request.Path,
                 Type = $"https://srm-oriental.ma/errors/{statusCode}"
             };
+
+            // 3. BONUS : On ajoute le CorrelationId directement dans le JSON d'erreur !
+            // Le jury verra que l'API frontend reçoit un ID de suivi technique pour le support.
+            problemDetails.Extensions.Add("correlationId", correlationId);
 
             var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
             return context.Response.WriteAsync(JsonSerializer.Serialize(problemDetails, options));

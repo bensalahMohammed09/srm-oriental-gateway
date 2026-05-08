@@ -27,5 +27,11 @@ namespace Srm.Gateway.Api.Controllers
             var result = await _n8nService.IncrementLevelAsync(id);
             return result ? Ok() : NotFound();
         }
+
+        [HttpGet("crash")]
+        public IActionResult Crash()
+        {
+            throw new InvalidOperationException("Test d'exception pour Grafana/Loki");
+        }
     }
 }
