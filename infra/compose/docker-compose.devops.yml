@@ -1,0 +1,88 @@
+# ==============================================================================
+# STACK DEVOPS : CI/CD et Qualité de code (Optimisée pour Ansible)
+# ==============================================================================
+name: srm-oriental-gateway
+services:
+# ----------------------------------------------------------------------------
+# CI/CD PIPELINE (Jenkins)
+# ----------------------------------------------------------------------------
+  jenkins-srm:
+    build:
+      context: ../
+      dockerfile: docker/jenkins.Dockerfile
+    container_name: jenkins-srm
+    user: root # Required to interact with host Docker socket
+    volumes:
+      - jenkins-srm_data:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock:ro # Docker-in-Docker capability
+    environment:
+      - JAVA_OPTS=-Xmx512m -Xms512m
+      - JENKINS_OPTS=--prefix=/jenkins
+    deploy:
+      resources:
+        limits:
+          memory: 1.5G 
+    networks:
+      - sec-net
+      - ops-net
+    restart: unless-stopped
+# ----------------------------------------------------------------------------
+# CODE QUALITY & SECURITY (SonarQube)
+# ----------------------------------------------------------------------------
+  # ------ SonarQube Database (PostgreSQL) ------
+  sonar-db:
+    build: 
+      context: ../
+      dockerfile: docker/sonar-db.Dockerfile
+      args:
+        SONAR_DB_VERSION: ${SONAR_DB_VERSION}
+        SONAR_DB_NAME: ${SONAR_DB_NAME}
+        SONAR_DB_USER: ${SONAR_DB_USER}
+        SONAR_DB_PASSWORD: ${SONAR_DB_PASSWORD}
+        SONAR_DB_INTERNAL_PORT: ${SONAR_DB_INTERNAL_PORT}
+    container_name: sonar-db
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    networks:
+      - sec-net
+    volumes:
+      - sonar_db_data:/var/lib/postgresql/data
+  # ----- SonarQube Server ------
+  sonarqube:
+    build:
+      context: ../
+      dockerfile: docker/sonarqube.Dockerfile
+      args:
+        SONAR_VERSION: ${SONAR_VERSION}
+        SONAR_INTERNAL_PORT: ${SONAR_INTERNAL_PORT}
+        SONAR_JDBC_USERNAME: ${SONAR_JDBC_USERNAME}
+        SONAR_JDBC_PASSWORD: ${SONAR_JDBC_PASSWORD}
+        SONAR_DB_INTERNAL_PORT: ${SONAR_DB_INTERNAL_PORT}
+        SONAR_DB_NAME: ${SONAR_DB_NAME}
+        SONAR_JDBC_URL: ${SONAR_JDBC_URL}
+    container_name: sonarqube
+    environment:
+      - SONAR_WEB_JAVA_OPTS=-Xmx1G -Xms1G 
+      - SONAR_CE_JAVA_OPTS=-Xmx1G -Xms1G
+      - SONAR_SEARCH_JAVA_OPTS=-Xmx512m -Xms512m
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+    networks:
+      - sec-net
+    depends_on:
+      - sonar-db
+networks:
+  sec-net:
+  ops-net:
+volumes:
+  jenkins-srm_data:
+  sonar_db_data:
+  sonarqube_data:
+  sonarqube_extensions:

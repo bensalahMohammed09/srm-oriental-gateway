@@ -11,7 +11,7 @@ RUN npm run build
 
 # --- 2. Runtime stage (Nginx) ---
 FROM --platform=linux/amd64 nginx:${NGINX_VERSION} AS final
-
+ARG DASHBOARD_INTERNAL_PORT
 WORKDIR /usr/share/nginx/html
 
 # Nettoyage et copie du build React
@@ -28,7 +28,7 @@ RUN touch /var/run/nginx.pid && \
 
 USER nginx
 # Le port interne est désormais fixe
-EXPOSE 8080
+EXPOSE ${DASHBOARD_INTERNAL_PORT}
 
 # On lance nginx directement en ignorant les scripts d'entrypoint qui cherchent des variables
 CMD ["nginx", "-g", "daemon off;"]

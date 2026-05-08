@@ -1,0 +1,152 @@
+# ==============================================================================
+# STACK CORE : Application Métier
+# Déploiement : Base de données, API, Dashboard, Worker OCR, n8n, Mailpit
+# ==============================================================================
+name: srm-oriental-gateway
+services:
+#----------------------------------------------------------------------------
+# PRIMARY DATABASE (PostgreSQL)
+# ----------------------------------------------------------------------------
+  srm-db:
+    build:
+      context: ../
+      dockerfile: docker/db.Dockerfile
+      args:
+        - POSTGRES_VERSION=${POSTGRES_VERSION}
+    container_name: srm-db
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - PGPORT=${DB_INTERNAL_PORT}
+    ports:
+      - "${DB_EXTERNAL_PORT}:${DB_INTERNAL_PORT}"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -p ${DB_INTERNAL_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5' # Limit to 50% of a single CPU core
+    networks:
+      - back-net
+# ----------------------------------------------------------------------------
+# BACKEND API (.NET)
+# ----------------------------------------------------------------------------
+  srm-api:
+    build:
+      context: ../../src/backend
+      dockerfile: ../../infra/docker/api.Dockerfile
+      args:
+        DOTNET_VERSION: ${DOTNET_VERSION}
+        API_INTERNAL_PORT: ${API_INTERNAL_PORT}
+        API_ENV: ${API_ENV}
+    container_name: srm-api
+    environment:
+      - "ConnectionStrings__DefaultConnection=Host=${DB_SERVICE};Port=${DB_INTERNAL_PORT};Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+    volumes:
+      - ../../src/workers/ocr-service/uploads:/app/uploads
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0' # Allow up to 1 full CPU core for better performance
+    networks:
+      - web-net
+      - back-net
+      - ops-net
+    restart: always
+# ----------------------------------------------------------------------------
+# FRONTEND DASHBOARD (React + Nginx)
+# ----------------------------------------------------------------------------
+  srm-dashboard:
+    build:
+      context: ../../
+      dockerfile: infra/docker/dashboard.Dockerfile
+      args:
+        NODE_VERSION: ${NODE_VERSION}
+        NGINX_VERSION: ${NGINX_VERSION}
+        DASHBOARD_INTERNAL_PORT: ${DASHBOARD_INTERNAL_PORT}
+    container_name: srm-dashboard
+    volumes:
+      - ../nginx/public.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../nginx/security_headers.conf:/etc/nginx/conf.d/security_headers.conf:ro
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    networks:
+      - web-net
+# ----------------------------------------------------------------------------
+# WORKER OCR (Python + Tesseract)
+# ----------------------------------------------------------------------------
+  srm-ocr-worker:
+    platform: linux/amd64
+    build:
+      context: ../
+      dockerfile: docker/worker.Dockerfile
+      args:
+        BASE_IMAGE:    ${BASE_IMAGE}
+        SRM_USER_ID:   ${SRM_USER_ID}
+        SRM_GROUP_ID:  ${SRM_GROUP_ID}
+        WORKER_ENV:    ${WORKER_ENV}
+    container_name: srm-ocr-worker
+    volumes:
+      - ../../src/workers/ocr-service/uploads:/home/srm_worker/app/uploads      
+      # 2. LE NOUVEAU : Le volume pour le code en live (Live Reloading)
+      #- ../../src/workers/ocr-service/tests:/home/srm_worker/app/tests
+      #- ../../src/workers/ocr-service/main.py:/home/srm_worker/app/main.py
+    deploy:
+      resources:
+        limits:
+          memory: 1G                                    # OCR is CPU/Memory intensive
+    networks:
+      - back-net
+      - ops-net
+    restart: on-failure
+# ----------------------------------------------------------------------------
+# Notification System (n8n)
+# ----------------------------------------------------------------------------
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    platform: linux/amd64
+    user: "1000:1000"
+    environment:
+      - N8N_HOST=${N8N_HOST:-localhost}
+      - N8N_PORT=${N8N_INTERNAL_PORT}
+      - N8N_PROTOCOL=http
+      - NODE_ENV=development
+      - N8N_EXECUTORS_PROCESS=main
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - back-net
+      - ops-net
+    restart: unless-stopped
+# ----------------------------------------------------------------------------
+# Emails Mock (Mailpit)
+# ----------------------------------------------------------------------------
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: mailpit
+    platform: linux/amd64
+    restart: always
+    ports:
+      - "8025:8025" # Web UI
+      - "1025:1025" # SMTP
+    networks:
+      - back-net
+networks: 
+  web-net:
+  back-net:
+  ops-net:
+volumes:
+  postgres_data:
+  n8n_data:

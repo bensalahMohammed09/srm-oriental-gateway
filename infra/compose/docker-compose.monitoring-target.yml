@@ -1,0 +1,85 @@
+# ==============================================================================
+# SCRAPING AGENTS 
+# ==============================================================================
+name: srm-oriental-gateway
+services:
+# ==============================================================================
+# Promtail 
+# ==============================================================================
+  promtail:
+    build:
+      context: ../
+      dockerfile: docker/promtail.Dockerfile
+      args:
+        PROMTAIL_VERSION: ${PROMTAIL_VERSION}
+        PROMTAIL_INTERNAL_PORT: ${PROMTAIL_INTERNAL_PORT}
+    container_name: promtail
+    # CRUCIAL : root est nécessaire pour lire /var/run/docker.sock
+    user: root 
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.2'
+    networks:
+      - ops-net
+    volumes:
+      # 1. Ta configuration (celle qui contient docker_sd_configs)
+      - ../promtail/promtail-config.yml:/etc/promtail/config.yml:ro
+      # 2. Le socket Docker en lecture seule (:ro) pour la découverte auto
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/log:/var/log:ro
+    restart: unless-stopped
+# ==============================================================================
+# Node Exporter 
+# ==============================================================================
+  node-exporter:
+    build:
+      context: ../
+      dockerfile: docker/node-exporter.Dockerfile
+      args:
+        NODE_EXPORTER_VERSION: ${NODE_EXPORTER_VERSION}
+        NODE_EXPORTER_INTERNAL_PORT: ${NODE_EXPORTER_INTERNAL_PORT}
+    container_name: node-exporter
+    command:
+      - '--path.rootfs=/host'
+      - '--web.listen-address=:${NODE_EXPORTER_INTERNAL_PORT}'
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+          cpus: '0.1'
+    restart: unless-stopped
+    volumes:
+      - '/:/host:ro'
+    networks:
+      - ops-net
+# ==============================================================================
+# CAdvisor 
+# ==============================================================================
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:${CADVISOR_VERSION}
+    container_name: cadvisor
+    privileged: true
+    ports:
+      - '${CADVISOR_EXTERNAL_PORT}:${CADVISOR_INTERNAL_PORT}'
+    command:
+      - '-port=${CADVISOR_INTERNAL_PORT}'
+    volumes:
+      - '/:/rootfs:ro'
+      - '/var/run:/var/run:rw'
+      - '/sys:/sys:ro'
+      - '/var/lib/docker/:/var/lib/docker:ro'
+      - '/dev/disk/:/dev/disk:ro'
+    devices:
+      - /dev/kmsg
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.2'
+    networks:
+      - ops-net
+    restart: unless-stopped
+networks:
+  ops-net:

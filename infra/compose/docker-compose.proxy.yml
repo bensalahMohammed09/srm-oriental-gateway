@@ -1,0 +1,19 @@
+# ==============================================================================
+# STACK PROXY : Point d'entrée unique (Optimisée pour Ansible)
+# ==============================================================================
+name: srm-oriental-gateway
+services:
+  srm-admin-proxy:
+    image: nginx:${NGINX_VERSION}
+    container_name: srm-admin-proxy
+    ports:
+      - "8888:80"
+    volumes:
+      - ../nginx/admin.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - ops-net
+      - sec-net
+    restart: always
+networks:
+  ops-net:
+  sec-net:
