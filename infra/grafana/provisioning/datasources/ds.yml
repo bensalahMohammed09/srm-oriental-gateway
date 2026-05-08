@@ -11,7 +11,7 @@ datasources:
     # Mode 'proxy' : Grafana effectue les requêtes via son backend vers le réseau Docker.
     access: proxy
     # URL interne au réseau Docker. Notez le port 9091 (ou 9090 selon votre config).
-    url: http://prometheus:9090
+    url: http://prometheus:9090/prometheus
     # Définit Prometheus comme la source sélectionnée par défaut dans Grafana.
     isDefault: true
     # Autorise la modification de la source via l'interface web si nécessaire.
