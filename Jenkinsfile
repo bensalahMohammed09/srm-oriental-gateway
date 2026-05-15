@@ -183,7 +183,7 @@ pipeline {
 
                     echo "Démarrage de la stack..."
                      withCredentials([file(credentialsId: 'srm-env-file', variable: 'SECRET_ENV')]) {
-                        sh """
+                        sh '''
                             # 1. First, get the list of services to start (excluding CI tools)
                             SERVICES=\$(docker compose --env-file ${SECRET_ENV} config --services | grep -vE 'jenkins-srm|sonarqube|sonar-db')
 
@@ -193,7 +193,7 @@ pipeline {
                                 --always-recreate-deps \
                                 --remove-orphans \
                                 \$SERVICES
-                        """
+                        '''
                     }
                     echo "Cleaning up...."
                     sh "docker system prune -f"
