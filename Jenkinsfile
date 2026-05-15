@@ -185,6 +185,7 @@ pipeline {
                                 
                                 # 3. FIX PERMISSIONS : Création du volume OCR s'il n'existe pas
                                 docker volume create ${projectPrefix}_ocr_uploads || true
+                                docker run --rm -i -v ${projectPrefix}_ocr_uploads:/dest alpine chmod 777 /dest
                             """
                             
                             echo "Injection des fichiers de configuration..."
