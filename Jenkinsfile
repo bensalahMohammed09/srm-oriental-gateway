@@ -182,18 +182,24 @@ pipeline {
                     sh "cat infra/promtail/promtail-config.yml | docker run --rm -i -v ${projectPrefix}_promtail_config:/dest alpine sh -c 'cat > /dest/config.yml'"
 
                     echo "Démarrage de la stack..."
-                     withCredentials([file(credentialsId: 'srm-env-file', variable: 'SECRET_ENV')]) {
-                        sh '''
-                            # 1. First, get the list of services to start (excluding CI tools)
-                            SERVICES=\$(docker compose --env-file ${SECRET_ENV} config --services | grep -vE 'jenkins-srm|sonarqube|sonar-db')
+                        withCredentials([file(credentialsId: 'srm-env-file', variable: 'SECRET_ENV')]) {
+                        sh """
+                            # 1. Strip hidden Windows characters (\r) that break Linux parsing
+                            tr -d '\\r' < ${SECRET_ENV} > clean.env
 
-                            # 2. Start only those services using the secret environment
-                            docker compose --env-file ${SECRET_ENV} up -d \
+                            # 2. Get services list using the clean file
+                            SERVICES=\$(docker compose --env-file clean.env config --services | grep -vE 'jenkins-srm|sonarqube|sonar-db')
+
+                            # 3. Start the stack
+                            docker compose --env-file clean.env up -d \
                                 --force-recreate \
                                 --always-recreate-deps \
                                 --remove-orphans \
                                 \$SERVICES
-                        '''
+
+                            # 4. Cleanup
+                            rm clean.env
+                        """
                     }
                     echo "Cleaning up...."
                     sh "docker system prune -f"
