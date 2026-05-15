@@ -1,9 +1,7 @@
-
 pipeline {
     agent any
 
-   
-    stages {
+      stages {
         stage('0. Preparation') {
             steps {
                 echo "Cleaning workspace and fixing Git permissions..."
@@ -40,7 +38,7 @@ pipeline {
             }
         }
 
-        stage('2. Backend Analysis with SonarQube') {
+        sstage('2. Backend Analysis with SonarQube') {
             when { 
                 expression { env.RUN_SONAR_BACKEND == "true" } 
             }
@@ -49,7 +47,8 @@ pipeline {
                     try {
                         sh "docker start sonar-db sonarqube"
                         
-                        curl -X POST "http://sonarqube:9002/api/system/migrate_db"
+                        // FIX: Added 'sh' wrapper here
+                        sh 'curl -X POST "http://sonarqube:9002/api/system/migrate_db"'
                         
                         sh 'timeout 120s bash -c "until curl -s http://sonarqube:9002/api/system/status | grep -q UP; do sleep 5; done"'
 
@@ -74,12 +73,11 @@ pipeline {
                             }
                         }
                     } finally {
-                        // Ensures services are stopped even if the analysis or build fails
                         sh "docker stop sonar-db sonarqube || true"
                     }
-                }
-            }
-        }
+                } // Closes script
+            } // Closes steps
+        } // Closes stage
 
         stage('3. Frontend & Worker Scan') {
             parallel {

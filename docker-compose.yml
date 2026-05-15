@@ -182,7 +182,9 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro # Docker-in-Docker capability
     environment:
       - JAVA_OPTS=-Xmx512m -Xms512m
-      - JENKINS_OPTS=--prefix=/jenkins --httpPort=${JENKINS_INTERNAL_PORT}
+      # - JENKINS_OPTS=--prefix=/jenkins --httpPort=${JENKINS_INTERNAL_PORT}
+    ports: 
+      - "${JENKINS_EXTERNAL_PORT}:${JENKINS_INTERNAL_PORT}"
     deploy:
       resources:
         limits:
