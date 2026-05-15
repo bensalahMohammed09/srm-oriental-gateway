@@ -27,6 +27,25 @@ public class DocumentController(
         return Ok(result);
     }
 
+    [HttpPost("upload")]
+    public async Task<IActionResult> UploadDocument(IFormFile file)
+    {
+        if (file == null || file.Length == 0)
+        {
+            return BadRequest(new { detail = "Aucun fichier fourni." });
+        }
+
+        try
+        {
+            await _commandService.SaveFileToPendingAsync(file);
+            return Ok(new { message = "Fichier uploadé avec succès dans le dossier pending.", fileName = file.FileName });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { detail = $"Erreur lors de l'upload : {ex.Message}" });
+        }
+    }
+
     [HttpGet("pending-indexation")]
     [Authorize(Roles = "ROLE_BO,ROLE_ADMIN")] // Restreint au Back-Office
     public async Task<IActionResult> GetPendingIndexation([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
