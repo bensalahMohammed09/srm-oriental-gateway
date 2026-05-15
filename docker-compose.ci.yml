@@ -1,0 +1,52 @@
+# ==============================================================================
+# FICHIER D'OVERRIDE POUR JENKINS (CI/CD)
+# Ce fichier remplace les montages de dossiers locaux (./infra) par 
+# des volumes nommés injectés par Jenkins, sans casser le dev local.
+# ==============================================================================
+
+services:
+  srm-admin-proxy:
+    volumes:
+      - ci_admin_conf:/etc/nginx/conf.d/default.conf:ro
+  srm-dashboard:
+    volumes:
+      - ci_public_conf:/etc/nginx/conf.d/default.conf:ro
+      - ci_security_headers:/etc/nginx/conf.d/security_headers.conf:ro
+  prometheus:
+    volumes:
+      - ci_prometheus_conf:/etc/prometheus/prometheus.yml:ro
+  loki:
+    volumes:
+      - ci_loki_config:/etc/loki/local-config.yaml:ro
+  promtail:
+    volumes:
+      - ci_promtail_config:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/log:/var/log:ro
+  grafana:
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ci_grafana_provisioning:/etc/grafana/provisioning:ro
+
+volumes:
+  ci_admin_conf:
+    name: srm-oriental-gateway_admin_conf
+    external: true
+  ci_public_conf:
+    name: srm-oriental-gateway_public_conf
+    external: true
+  ci_security_headers:
+    name: srm-oriental-gateway_security_headers
+    external: true
+  ci_prometheus_conf:
+    name: srm-oriental-gateway_prometheus_config
+    external: true
+  ci_loki_config:
+    name: srm-oriental-gateway_loki_config
+    external: true
+  ci_promtail_config:
+    name: srm-oriental-gateway_promtail_config
+    external: true
+  ci_grafana_provisioning:
+    name: srm-oriental-gateway_grafana_provisioning
+    external: true
