@@ -47,7 +47,7 @@ public class DocumentController(
     }
 
     [HttpGet("pending-indexation")]
-    [Authorize(Roles = "ROLE_BO,ROLE_ADMIN")] // Restreint au Back-Office
+    [Authorize(Roles = "ROLE_BO")] 
     public async Task<IActionResult> GetPendingIndexation([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
     {
         var result = await _queryService.GetPendingIndexationAsync(pageNumber, pageSize);

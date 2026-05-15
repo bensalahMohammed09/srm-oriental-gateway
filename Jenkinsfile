@@ -229,9 +229,6 @@ pipeline {
                                 rm clean.env docker-compose.clean.yml
                             '''
                         }
-                            
-                        echo "Nettoyage du système..."
-                        sh "docker system prune -f"
                     }
                 }
            }
