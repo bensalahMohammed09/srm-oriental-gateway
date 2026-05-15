@@ -38,7 +38,7 @@ pipeline {
             }
         }
 
-        sstage('2. Backend Analysis with SonarQube') {
+        stage('2. Backend Analysis with SonarQube') {
             when { 
                 expression { env.RUN_SONAR_BACKEND == "true" } 
             }
