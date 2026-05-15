@@ -9,6 +9,8 @@
 *.pem
 *.p12
 *.tmp
+*.md 
+.dockerignore
 
 # --- .NET (Gateway API) ---
 # Build artifacts and local VS settings
@@ -54,8 +56,5 @@ Thumbs.db
 
 src/wrokers/ocr-service/uploads/
 
-# Others
-.JOURNAL.md
-.correction-ideas-questions.md
-.journal2.md
+
 
