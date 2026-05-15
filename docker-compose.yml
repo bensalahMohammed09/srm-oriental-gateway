@@ -226,15 +226,17 @@ services:
         SONAR_INTERNAL_PORT: ${SONAR_INTERNAL_PORT}
         SONAR_JDBC_USERNAME: ${SONAR_JDBC_USERNAME}
         SONAR_JDBC_PASSWORD: ${SONAR_JDBC_PASSWORD}
-        SONAR_DB_INTERNAL_PORT: ${SONAR_DB_INTERNAL_PORT}
         SONAR_DB_NAME: ${SONAR_DB_NAME}
         SONAR_JDBC_URL: ${SONAR_JDBC_URL}
     container_name: sonarqube
+    ports:
+      - "${SONAR_EXTERNAL_PORT}:${SONAR_INTERNAL_PORT}"
     environment:
+      - SONAR_WEB_PORT=${SONAR_INTERNAL_PORT}
       - SONAR_WEB_JAVA_OPTS=-Xmx1G -Xms1G 
       - SONAR_CE_JAVA_OPTS=-Xmx1G -Xms1G
       - SONAR_SEARCH_JAVA_OPTS=-Xmx512m -Xms512m
-      - SONAR_WEB_CONTEXT=/sonar
+      #  - SONAR_WEB_CONTEXT=/sonar
     deploy:
       resources:
         limits:
