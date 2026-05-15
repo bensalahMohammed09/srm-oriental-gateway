@@ -1,0 +1,126 @@
+---
+# Refacrored tasks using variables from vars/main.yml for better readability and maintainability.
+# This follows the industrial standard for Ansible Role structure.
+
+# ==============================================================================
+# 1. SYSTEM PREPARATION & UPDATES
+# ==============================================================================
+- name: Update apt cache and upgrade system packages
+  apt:
+    update_cache: yes
+    upgrade: dist
+    cache_valid_time: 3600
+
+- name: Install fondational system packages
+  apt:
+    name: "{{ common_system_packages }}"
+    state: present 
+  
+# ==============================================================================
+# 2. USER & PERMISSIONS MANAGEMENT
+# ==============================================================================
+- name: Ensure the deployment group exists
+  group:
+    name: "{{ deploy_group }}"
+    state: present
+
+- name: Create the deployment service user
+  user:
+    name: "{{ deploy_user }}"
+    group: "{{ deploy_group }}"
+    shell: /bin/bash
+    create_home: yes
+
+# ==============================================================================
+# 3. FILESYSTEM HIERARCHY
+# ==============================================================================
+- name: Create project directory structure with correct permissions
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_group }}"
+    mode: '0755'
+  loop: "{{ common_mandatory_subdirs }}"
+
+# ==============================================================================
+# 4. DOCKER ENGINE INSTALLATION
+# ==============================================================================
+- name: Create directory for Docker GPG key
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+- name: Add Docker official GPG key
+  apt_key:
+    url: "{{ docker_gpg_url }}"
+    keyring: /etc/apt/keyrings/docker.gpg
+    state: present
+
+- name: Add Docker repository to Apt sources 
+  apt_repository:
+    repo: "{{ docker_repo_url }}"
+    state: present
+    filename: docker
+
+- name: Install Docker Engine and Compose Plugin
+  apt:
+    name: "{{ item }}"
+    state: present
+    update_cache: yes
+  loop: "{{ docker_plugins }}"
+
+- name: Ensure Docker service is started and enabled
+  service:
+    name: docker
+    state: started
+    enabled: yes
+
+# ==============================================================================
+# 5. DOCKER NETWORK PROVISIONING
+# ==============================================================================
+- name: Create internal Docker Networks
+  docker_network:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ target_docker_networks }}"
+
+# ==============================================================================
+# 6. SECURITY: UFW FIREWALL CONFIGURATION
+# ==============================================================================
+- name: Configure UFW default policies
+  ufw:
+    direction: "{{ item.direction }}"
+    policy: "{{ item.policy }}"
+  loop:
+    - { direction: 'incoming', policy: 'deny'}
+    - { direction: 'outgoing', policy: 'allow'}
+
+- name: Allow public access
+  ufw:
+    rule: allow
+    port: "{{ item | string }}"
+    proto: tcp
+  loop: "{{ public_allowed_ports }}"
+
+- name: Allow Scrapers from Central Host
+  ufw: 
+    rule: allow
+    from_ip: "{{ central_management_ip }}"
+    port: "{{ item | string }}"
+    proto: tcp
+  loop: "{{ monitoring_allowed_ports }}"
+
+- name: Ensure Outbound to Loki is specifically permitted
+  ufw:
+    rule: allow
+    direction: out
+    to_ip: "{{ central_management_ip }}"
+    port: "{{ loki_outbound_port | string }}"
+    proto: tcp
+    comment: "Promtail push to Central Loki"
+
+- name: Enable UFW firewall
+  ufw:
+    state: enabled

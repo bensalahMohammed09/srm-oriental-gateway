@@ -1,0 +1,25 @@
+---
+
+- name: Ensure nginx configuration directory exists
+  ansible.builtin.file:
+    path: "{{ project_root}}/nginx"
+    state: directory
+    mode: '0755'
+
+- name: Template nginx security headers
+  ansible.builtin.template:
+    src: security_headers.conf.j2
+    dest: "{{ project_root}}/nginx/security_headers.conf"
+    mode: '0644'
+
+- name: Template nginx configuration
+  ansible.builtin.template:
+    src: public.conf.j2
+    dest: "{{ project_root}}/nginx/public.conf"
+    mode: '0644'      
+
+- name: Template Docker Compose file 
+  ansible.builtin.template:
+    src: docker-compose.proxy.yml.j2
+    dest: "{{ project_root}}/docker-compose.proxy.yml"
+    mode: '0644'

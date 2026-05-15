@@ -1,0 +1,42 @@
+---
+# Variables specific to the common role.
+# This keeps the tasks clean and easy to read.
+
+common_system_packages:
+  - "ca-certificates"
+  - "apt-transport-https"
+  - "curl"
+  - "gnupg"
+  - "lsb-release"
+  - "python3-pip"
+  - "ufw"
+  - "git"
+
+
+# ==============================================================================
+# DOCKER REPOSITORY CONSTANTS
+# ==============================================================================
+# Hardcoded URLs for the official Docker engine installation.
+docker_gpg_url: "https://download.docker.com/linux/ubuntu/gpg"
+docker_repo_url: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+
+docker_plugins:
+  - "docker-ce"
+  - "docker-ce-cli"
+  - "containerd.io"
+  - "docker-buildx-plugin"
+  - 'docker-compose-plugin'
+# ==============================================================================
+# MANDATORY DIRECTORY STRUCTURE (Logic-Driven)
+# ==============================================================================
+# This list is used by the file module in our tasks to ensure all sub-folders 
+# exist with the correct permissions.
+common_mandatory_subdirs:
+  - "{{ base_dir }}"
+  - "{{ infra_dir }}"
+  - "{{ nginx_dir }}"
+  - "{{ promtail_dir }}"
+  - "{{ upload_dir }}"
+  - "{{ backup_root }}"
+  - "{{ db_backup_dir }}"
+

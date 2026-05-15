@@ -1,0 +1,21 @@
+name: srm-oriental-gateway
+services:
+  {{ dashboard_service_name }}:
+    image: {{ registry_url }}/{{ dashboard_service_name }}:{{ git_sha }}
+    container_name: {{ dashboard_service_name }}
+    ports:
+      - "{{ dashboard_external_port }}:{{ dashboard_internal_port }}"
+    volumes:
+      - ./nginx/security_headers.conf:/etc/nginx/conf.d/security_headers.conf:ro
+      - ./nginx/public.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - {{ public_network_name }}
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: {{ dashboard_memory_limit }}
+          cpus: '{{ dashboard_cpu_limit }}'
+  
+network:
+  {{ public_network_name }}:

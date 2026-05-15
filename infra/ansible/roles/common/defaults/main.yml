@@ -1,0 +1,35 @@
+---
+
+deploy_user: "gateway-deploy"
+deploy_group: "docker"
+
+base_dir: "/opt/srm-oriental"
+
+infra_dir: "{{ base_dir }}/infra"
+nginx_dir: "{{ base_dir }}/nginx"
+promtail_dir: "{{ base_dir }}/promtail"
+upload_dir: "{{ base_dir }}/uploads"
+
+backup_root: "{{ base_dir }}/backups"
+db_backup_dir: "{{ base_dir }}/postgres"
+backup_retention_days: 7
+
+target_docker_networks:
+  - "web-net"
+  - "back-net"
+  - "ops-net"
+
+ufw_enabled: true
+ufw_default_policy: "deny"
+
+public_allowed_ports:
+  - 22
+  - 80
+  - 443
+
+monitoring_allowed_ports:
+  - "{{ node_exporter_port }}"
+  - "{{ cadvisor_port }}"
+  - "{{ promtail_health_port }}"
+
+loki_outbound_port: "{{ loki_receiver_port }}"

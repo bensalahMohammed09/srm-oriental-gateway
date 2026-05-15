@@ -1,0 +1,39 @@
+---
+ansible_user: gateway-deploy
+ansible_ssh_private_key_file: "~/.ssh/id_ed25519"
+
+
+project_name: "srm-oriental-gateway"
+app_env: "production"
+
+central_management_ip: "192.168.1.4"
+
+
+docker_images:
+  api: "srm-api@sha256:"
+  dashboard: "srm-dashboard@sha256"
+  ocr_worker: "srm-ocr-worker@sha256"
+  db: "srm-db@sha256"
+  n8n: "n8nio/n8n:latest"
+  mailpit: "axllent/mailpit:latest"
+  promtail: "grafana/promtail:latest"
+  node_exporter: "prom/node-exporter:latest"
+  cadvisor: "gcr.io/cadvisor/cadvisor:latest"
+
+
+postgres_user: "srm_db_admin"
+postgres_db_name: "srm_gateway_db"
+postgres_password: "temporary_dev_password"
+postgres_internal_port: 5432
+
+dashboard_external_port: 80
+mailpit_external_port: 8025
+node_exporter_port: 9100
+cadvisor_port: 8081
+promtail_health_port: 9080
+loki_receiver_port: 3100
+
+
+# base_dir: "opt/srm-oriental-gateway"
+
+

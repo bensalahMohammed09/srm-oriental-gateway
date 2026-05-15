@@ -1,0 +1,8 @@
+---
+# Ce fichier liste les collections et rôles Ansible requis pour le projet.
+# Dans un projet industriel, on utilise des outils communautaires testés.
+
+collections:
+  - name: community.general
+  
+  - name: community.docker

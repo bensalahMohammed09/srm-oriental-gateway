@@ -1,0 +1,59 @@
+# Définition du format JSON pour les analytics (Dashboard Grafana)
+log_format json_public escape=json '{'
+    '"time_local":"$time_local",'
+    '"remote_addr":"$remote_addr",'
+    '"request":"$request",'
+    '"status": "$status",'
+    '"body_bytes_sent":"$body_bytes_sent",'
+    '"request_time":"$request_time",'
+    '"http_referrer":"$http_referer",'
+    '"http_user_agent":"$http_user_agent",'
+    '"upstream_addr":"$upstream_addr"'
+'}';
+
+server {
+    # 🛡️ FIX : On remet 8080 car l'utilisateur 'nginx' est non-root
+    listen {{ dashboard_internal_port }};
+    server_name {{ domain_name }};
+
+    # On utilise le DNS interne de Docker
+    resolver {{ docker_dns_resolver }} valid={{ docker_dns_valid_time }}s;
+
+    client_max_body_size {{ nginx_client_max_body_size }};
+    # Custom error page for Downtime
+    error_page 502 503 504 /maintenance.html;
+    location = /maintenance.html {
+        root /usr/share/nginx/html;
+        internal;
+    }
+
+    # --- 1. Static Files (Frontend React/Angular) ---
+    location / {
+        root /usr/share/nginx/html;
+        index index.html;
+        
+        # 🛡️ FIX : Support du Routing SPA (React Router / Angular Router)
+        try_files $uri $uri/ /index.html;
+    }
+
+    # --- 2. API Proxy ---
+    location /api/ {
+        set $upstream_api {{ api_service_name }};
+
+        proxy_pass http://$upstream_api:{{ api_internal_port }};
+
+        # Intercept errors to show maintenance page
+        proxy_intercept_errors on;
+
+        proxy_http_version 1.1;
+        proxy_set_header Connection keep-alive;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_read_timeout {{ nginx_proxy_read_timeout }};
+        proxy_connect_timeout {{ nginx_proxy_connect_timeout }};
+    }
+
+}

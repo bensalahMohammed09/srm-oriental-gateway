@@ -1,0 +1,8 @@
+--- 
+# The "Master" playbook.
+
+- name: Infrastructure and common configuration
+  hosts: srm-production
+  become: true
+  roles:
+    - common
