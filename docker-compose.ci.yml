@@ -1,34 +1,35 @@
 # ==============================================================================
 # FICHIER D'OVERRIDE POUR JENKINS (CI/CD)
-# Ce fichier remplace les montages de dossiers locaux (./infra) par 
-# des volumes nommés injectés par Jenkins, sans casser le dev local.
+# Utilise !reset pour écraser complètement les listes de volumes locales
 # ==============================================================================
 
 services:
   srm-admin-proxy:
-    volumes:
-      # Changed to directory mount
+    volumes: !reset
       - ci_admin_conf:/etc/nginx/conf.d:ro
+      
   srm-dashboard:
-    volumes:
-      # Changed to directory mount (Will hold both default.conf AND security_headers.conf)
+    volumes: !reset
       - ci_public_conf:/etc/nginx/conf.d:ro
+      
   prometheus:
-    volumes:
-      # Changed to directory mount
+    volumes: !reset
       - ci_prometheus_conf:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+      
   loki:
-    volumes:
-      # Changed to directory mount
+    volumes: !reset
       - ci_loki_config:/etc/loki:ro
+      - loki_data:/tmp/loki
+      
   promtail:
-    volumes:
-      # Changed to directory mount
+    volumes: !reset
       - ci_promtail_config:/etc/promtail:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /var/log:/var/log:ro
+      
   grafana:
-    volumes:
+    volumes: !reset
       - grafana_data:/var/lib/grafana
       - ci_grafana_provisioning:/etc/grafana/provisioning:ro
 
