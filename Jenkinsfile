@@ -232,7 +232,7 @@ pipeline {
                 }
             }
         }
-    }
+    
 
     post{
         always{
