@@ -45,7 +45,6 @@ public class DocumentController(
             return StatusCode(500, new { detail = $"Erreur lors de l'upload : {ex.Message}" });
         }
     }
-    // test 
     [HttpGet("pending-indexation")]
     [Authorize(Roles = "ROLE_BO")] 
     public async Task<IActionResult> GetPendingIndexation([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)

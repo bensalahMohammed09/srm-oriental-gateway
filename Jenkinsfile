@@ -46,7 +46,7 @@ pipeline {
                             sh "docker start sonar-db sonarqube"
                             
                             // FIX: Added 'sh' wrapper here
-                            sh 'curl -X POST "http://sonarqube:9002/api/system/migrate_db"'
+                            //sh 'curl -X POST "http://sonarqube:9002/api/system/migrate_db"'
                             
                             sh 'timeout 120s bash -c "until curl -s http://sonarqube:9002/api/system/status | grep -q UP; do sleep 5; done"'
 
