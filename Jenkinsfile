@@ -14,9 +14,7 @@ pipeline {
 
                 sh "echo 'GIT_SHA sauvegardé : ' && cat .git_sha"
 
-                withCredentials([file(credentialsId: 'srm-env-file', variable: 'SECRET_ENV')]) {
-                        sh "cp \$SECRET_ENV ./.env"
-                }
+                
             }
         }
 
@@ -184,13 +182,19 @@ pipeline {
                     sh "cat infra/promtail/promtail-config.yml | docker run --rm -i -v ${projectPrefix}_promtail_config:/dest alpine sh -c 'cat > /dest/config.yml'"
 
                     echo "Démarrage de la stack..."
-                      sh """
-                            docker compose up -d \
-                            --force-recreate \
-                            --always-recreate-deps \
-                            --remove-orphans \
-                            \$(docker compose config --services | grep -vE 'jenkins-srm|sonarqube|sonar-db')
+                     withCredentials([file(credentialsId: 'srm-env-file', variable: 'SECRET_ENV')]) {
+                        sh """
+                            # 1. First, get the list of services to start (excluding CI tools)
+                            SERVICES=\$(docker compose --env-file ${SECRET_ENV} config --services | grep -vE 'jenkins-srm|sonarqube|sonar-db')
+
+                            # 2. Start only those services using the secret environment
+                            docker compose --env-file ${SECRET_ENV} up -d \
+                                --force-recreate \
+                                --always-recreate-deps \
+                                --remove-orphans \
+                                \$SERVICES
                         """
+                    }
                     echo "Cleaning up...."
                     sh "docker system prune -f"
                 }
