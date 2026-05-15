@@ -211,13 +211,13 @@ pipeline {
                                 # 1. Nettoyage des caractères Windows
                                 cat "$SECRET_ENV" | tr -d '\r' > clean.env
 
-                                # 2. Le Chirurgien : Supprime les montages locaux (infra et OCR)
-                                sed -e '/- \\.\\/infra\\//d' -e '/\\/app\\/uploads/d' docker-compose.yml > docker-compose.clean.yml
+                                # 2. Le Chirurgien V2 : Remplace les lignes par un montage fantôme pour garder le YAML valide
+                                sed -e 's|.*- \\.\\/infra\\/.*|      - /dev/null:/tmp/dummy|g' -e 's|.*\\/app\\/uploads.*|      - /dev/null:/tmp/dummy|g' docker-compose.yml > docker-compose.clean.yml
 
-                                # 3. Récupération des services cibles (EXCLUT Jenkins et Sonar pour les protéger !)
+                                # 3. Récupération des services cibles (EXCLUT Jenkins et Sonar)
                                 SERVICES=$(docker compose -f docker-compose.clean.yml -f docker-compose.ci.yml --env-file clean.env config --services | grep -vE 'jenkins-srm|sonarqube|sonar-db')
 
-                                # 4. Déploiement (Jenkins et Sonar continueront de tourner sans être perturbés)
+                                # 4. Déploiement
                                 docker compose -f docker-compose.clean.yml -f docker-compose.ci.yml --env-file clean.env up -d \
                                     --force-recreate \
                                     --always-recreate-deps \
