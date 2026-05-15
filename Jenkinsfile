@@ -160,47 +160,48 @@ pipeline {
             }
         
 
-            stage('6. Prepare CI Configuration Volumes') {
-                steps {
-                    script {
-                        echo "Nettoyage et injection des configurations dans les volumes Docker..."
-                        def projectPrefix = "srm-oriental-gateway"
-                        
-                        // Utilisation d'un bloc shell multi-lignes pour nettoyer le code Groovy
-                        sh """
-                            # 1. Suppression des anciens volumes (Nettoyage)
-                            docker volume rm ${projectPrefix}_loki_config || true
-                            docker volume rm ${projectPrefix}_prometheus_config || true
-                            docker volume rm ${projectPrefix}_promtail_config || true
-                            docker volume rm ${projectPrefix}_admin_conf || true
-                            docker volume rm ${projectPrefix}_public_conf || true
-                            docker volume rm ${projectPrefix}_security_headers || true
-                            docker volume rm ${projectPrefix}_grafana_provisioning || true
+                stage('6. Prepare CI Configuration Volumes') {
+                    steps {
+                        script {
+                            echo "Nettoyage et injection des configurations dans les volumes Docker..."
+                            def projectPrefix = "srm-oriental-gateway"
                             
-                            # 2. Création des nouveaux volumes vides
-                            docker volume create ${projectPrefix}_loki_config
-                            docker volume create ${projectPrefix}_prometheus_config
-                            docker volume create ${projectPrefix}_promtail_config
-                            docker volume create ${projectPrefix}_admin_conf
-                            docker volume create ${projectPrefix}_public_conf
-                            docker volume create ${projectPrefix}_security_headers
-                            docker volume create ${projectPrefix}_grafana_provisioning
-                        """
-                        
-                        // 3. Injection du contenu des fichiers (Direct Pipe)
-                        echo "Injection des fichiers de configuration..."
-                        sh "cat infra/loki/loki-config.yml | docker run --rm -i -v ${projectPrefix}_loki_config:/dest alpine sh -c 'cat > /dest/local-config.yaml'"
-                        sh "cat infra/prometheus/prometheus.yml | docker run --rm -i -v ${projectPrefix}_prometheus_config:/dest alpine sh -c 'cat > /dest/prometheus.yml'"
-                        sh "cat infra/promtail/promtail-config.yml | docker run --rm -i -v ${projectPrefix}_promtail_config:/dest alpine sh -c 'cat > /dest/config.yml'"
-                        sh "cat infra/nginx/admin.conf | docker run --rm -i -v ${projectPrefix}_admin_conf:/dest alpine sh -c 'cat > /dest/default.conf'"
-                        sh "cat infra/nginx/public.conf | docker run --rm -i -v ${projectPrefix}_public_conf:/dest alpine sh -c 'cat > /dest/default.conf'"
-                        sh "cat infra/nginx/security_headers.conf | docker run --rm -i -v ${projectPrefix}_security_headers:/dest alpine sh -c 'cat > /dest/security_headers.conf'"
-                        
-                        echo "Injection du dossier de provisioning Grafana..."
-                        sh "tar -cC infra/grafana/provisioning . | docker run --rm -i -v ${projectPrefix}_grafana_provisioning:/dest alpine tar -x -C /dest"
+                            // Utilisation d'un bloc shell multi-lignes pour nettoyer le code Groovy
+                            sh """
+                                # 1. Suppression des anciens volumes (Nettoyage)
+                                docker volume rm ${projectPrefix}_loki_config || true
+                                docker volume rm ${projectPrefix}_prometheus_config || true
+                                docker volume rm ${projectPrefix}_promtail_config || true
+                                docker volume rm ${projectPrefix}_admin_conf || true
+                                docker volume rm ${projectPrefix}_public_conf || true
+                                docker volume rm ${projectPrefix}_grafana_provisioning || true
+                                
+                                # 2. Création des nouveaux volumes vides
+                                docker volume create ${projectPrefix}_loki_config
+                                docker volume create ${projectPrefix}_prometheus_config
+                                docker volume create ${projectPrefix}_promtail_config
+                                docker volume create ${projectPrefix}_admin_conf
+                                docker volume create ${projectPrefix}_public_conf
+                                docker volume create ${projectPrefix}_grafana_provisioning
+                            """
+                            
+                            // 3. Injection du contenu des fichiers (Direct Pipe)
+                            echo "Injection des fichiers de configuration..."
+                            sh "cat infra/loki/loki-config.yml | docker run --rm -i -v ${projectPrefix}_loki_config:/dest alpine sh -c 'cat > /dest/local-config.yaml'"
+                            sh "cat infra/prometheus/prometheus.yml | docker run --rm -i -v ${projectPrefix}_prometheus_config:/dest alpine sh -c 'cat > /dest/prometheus.yml'"
+                            sh "cat infra/promtail/promtail-config.yml | docker run --rm -i -v ${projectPrefix}_promtail_config:/dest alpine sh -c 'cat > /dest/config.yml'"
+                            sh "cat infra/nginx/admin.conf | docker run --rm -i -v ${projectPrefix}_admin_conf:/dest alpine sh -c 'cat > /dest/default.conf'"
+                            
+                            // Nginx Dashboard : On injecte les DEUX fichiers dans le MÊME volume
+                            sh "cat infra/nginx/public.conf | docker run --rm -i -v ${projectPrefix}_public_conf:/dest alpine sh -c 'cat > /dest/default.conf'"
+                            sh "cat infra/nginx/security_headers.conf | docker run --rm -i -v ${projectPrefix}_public_conf:/dest alpine sh -c 'cat > /dest/security_headers.conf'"
+                            
+                            echo "Injection du dossier de provisioning Grafana..."
+                            sh "tar -cC infra/grafana/provisioning . | docker run --rm -i -v ${projectPrefix}_grafana_provisioning:/dest alpine tar -x -C /dest"
+                        }
                     }
                 }
-            }
+
 
             stage('7. Deploy SRM Stack') {
                 steps {
