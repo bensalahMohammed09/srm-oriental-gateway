@@ -160,15 +160,14 @@ pipeline {
             }
         
 
-                stage('6. Prepare CI Configuration Volumes') {
-                    steps {
-                        script {
-                            echo "Nettoyage et injection des configurations dans les volumes Docker..."
-                            def projectPrefix = "srm-oriental-gateway"
+            stage('6. Prepare CI Configuration Volumes') {
+                steps {
+                    script {
+                        echo "Nettoyage et injection des configurations dans les volumes Docker..."
+                        def projectPrefix = "srm-oriental-gateway"
                             
-                            // Utilisation d'un bloc shell multi-lignes pour nettoyer le code Groovy
                             sh """
-                                # 1. Suppression des anciens volumes (Nettoyage)
+                                # 1. Suppression des anciens volumes (On ne supprime pas ocr_uploads pour garder les fichiers !)
                                 docker volume rm ${projectPrefix}_loki_config || true
                                 docker volume rm ${projectPrefix}_prometheus_config || true
                                 docker volume rm ${projectPrefix}_promtail_config || true
@@ -176,23 +175,23 @@ pipeline {
                                 docker volume rm ${projectPrefix}_public_conf || true
                                 docker volume rm ${projectPrefix}_grafana_provisioning || true
                                 
-                                # 2. Création des nouveaux volumes vides
+                                # 2. Création des volumes de config
                                 docker volume create ${projectPrefix}_loki_config
                                 docker volume create ${projectPrefix}_prometheus_config
                                 docker volume create ${projectPrefix}_promtail_config
                                 docker volume create ${projectPrefix}_admin_conf
                                 docker volume create ${projectPrefix}_public_conf
                                 docker volume create ${projectPrefix}_grafana_provisioning
+                                
+                                # 3. FIX PERMISSIONS : Création du volume OCR s'il n'existe pas
+                                docker volume create ${projectPrefix}_ocr_uploads || true
                             """
                             
-                            // 3. Injection du contenu des fichiers (Direct Pipe)
                             echo "Injection des fichiers de configuration..."
                             sh "cat infra/loki/loki-config.yml | docker run --rm -i -v ${projectPrefix}_loki_config:/dest alpine sh -c 'cat > /dest/local-config.yaml'"
                             sh "cat infra/prometheus/prometheus.yml | docker run --rm -i -v ${projectPrefix}_prometheus_config:/dest alpine sh -c 'cat > /dest/prometheus.yml'"
                             sh "cat infra/promtail/promtail-config.yml | docker run --rm -i -v ${projectPrefix}_promtail_config:/dest alpine sh -c 'cat > /dest/config.yml'"
                             sh "cat infra/nginx/admin.conf | docker run --rm -i -v ${projectPrefix}_admin_conf:/dest alpine sh -c 'cat > /dest/default.conf'"
-                            
-                            // Nginx Dashboard : On injecte les DEUX fichiers dans le MÊME volume
                             sh "cat infra/nginx/public.conf | docker run --rm -i -v ${projectPrefix}_public_conf:/dest alpine sh -c 'cat > /dest/default.conf'"
                             sh "cat infra/nginx/security_headers.conf | docker run --rm -i -v ${projectPrefix}_public_conf:/dest alpine sh -c 'cat > /dest/security_headers.conf'"
                             
@@ -200,38 +199,41 @@ pipeline {
                             sh "tar -cC infra/grafana/provisioning . | docker run --rm -i -v ${projectPrefix}_grafana_provisioning:/dest alpine tar -x -C /dest"
                         }
                     }
-                }
+            }
 
 
-            stage('7. Deploy SRM Stack') {
+           stage('7. Deploy SRM Stack') {
                 steps {
                     script {
                         echo "Démarrage de la stack avec Docker Compose..."
                         withCredentials([file(credentialsId: 'srm-env-file', variable: 'SECRET_ENV')]) {
                             sh '''
-                                # 1. Nettoyage des caractères Windows (\r) invisibles
+                                # 1. Nettoyage des caractères Windows
                                 cat "$SECRET_ENV" | tr -d '\r' > clean.env
 
-                                # 2. Récupération de la liste des services cibles (Fusion des fichiers local + CI)
-                                SERVICES=$(docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file clean.env config --services | grep -vE 'jenkins-srm|sonarqube|sonar-db')
+                                # 2. Le Chirurgien : Supprime les montages locaux (infra et OCR)
+                                sed -e '/- \\.\\/infra\\//d' -e '/\\/app\\/uploads/d' docker-compose.yml > docker-compose.clean.yml
 
-                                # 3. Lancement de la stack (Fusion des fichiers local + CI)
-                                docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file clean.env up -d \
+                                # 3. Récupération des services cibles (EXCLUT Jenkins et Sonar pour les protéger !)
+                                SERVICES=$(docker compose -f docker-compose.clean.yml -f docker-compose.ci.yml --env-file clean.env config --services | grep -vE 'jenkins-srm|sonarqube|sonar-db')
+
+                                # 4. Déploiement (Jenkins et Sonar continueront de tourner sans être perturbés)
+                                docker compose -f docker-compose.clean.yml -f docker-compose.ci.yml --env-file clean.env up -d \
                                     --force-recreate \
                                     --always-recreate-deps \
                                     --remove-orphans \
                                     $SERVICES
 
-                                # 4. Suppression sécurisée du fichier temporaire
-                                rm clean.env
+                                # 5. Nettoyage
+                                rm clean.env docker-compose.clean.yml
                             '''
                         }
-                        
+                            
                         echo "Nettoyage du système..."
                         sh "docker system prune -f"
                     }
                 }
-            }
+           }
         }
     
 

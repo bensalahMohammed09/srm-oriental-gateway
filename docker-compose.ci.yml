@@ -1,37 +1,38 @@
 # ==============================================================================
 # FICHIER D'OVERRIDE POUR JENKINS (CI/CD)
-# Utilise !reset pour écraser complètement les listes de volumes locales
 # ==============================================================================
 
 services:
   srm-admin-proxy:
-    volumes: !reset
+    volumes:
       - ci_admin_conf:/etc/nginx/conf.d:ro
-      
   srm-dashboard:
-    volumes: !reset
+    volumes:
       - ci_public_conf:/etc/nginx/conf.d:ro
-      
   prometheus:
-    volumes: !reset
+    volumes:
       - ci_prometheus_conf:/etc/prometheus:ro
-      - prometheus_data:/prometheus
-      
   loki:
-    volumes: !reset
+    volumes:
       - ci_loki_config:/etc/loki:ro
-      - loki_data:/tmp/loki
-      
   promtail:
-    volumes: !reset
+    volumes:
       - ci_promtail_config:/etc/promtail:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /var/log:/var/log:ro
-      
   grafana:
-    volumes: !reset
+    volumes:
       - grafana_data:/var/lib/grafana
       - ci_grafana_provisioning:/etc/grafana/provisioning:ro
+
+  # FIX OCR : Remplacement du dossier local par un volume nommé sécurisé
+  srm-api:
+    volumes:
+      - ci_ocr_uploads:/app/uploads
+      
+  srm-ocr-worker:
+    volumes:
+      - ci_ocr_uploads:/home/srm_worker/app/uploads
 
 volumes:
   ci_admin_conf:
@@ -51,4 +52,8 @@ volumes:
     external: true
   ci_grafana_provisioning:
     name: srm-oriental-gateway_grafana_provisioning
+    external: true
+  # Le volume partagé pour les uploads OCR
+  ci_ocr_uploads:
+    name: srm-oriental-gateway_ocr_uploads
     external: true
