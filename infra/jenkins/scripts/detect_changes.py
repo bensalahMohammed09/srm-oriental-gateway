@@ -129,6 +129,8 @@ def main():
 
     service_map = get_service_map()
 
+    triggers["ALL_SERVICES"] = ",".join(service_map.keys())
+
     # Match changes against the Rich Service Map
     for service_name, config in service_map.items():
         var_base = service_name.upper().replace('-', '_')
