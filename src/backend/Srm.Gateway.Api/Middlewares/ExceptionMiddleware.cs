@@ -23,7 +23,6 @@ namespace Srm.Gateway.Api.Middlewares
             _next = next;
             _logger = logger;
         }
-        // test the pipeline
         public async Task InvokeAsync(HttpContext context)
         {
             // 1. EXTRACT OR GENERATE CORRELATION ID

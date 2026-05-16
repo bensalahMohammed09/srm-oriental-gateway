@@ -93,7 +93,7 @@ pipeline {
 
                                 sh """
                                     set -a && source .env && set +a
-                                    BUILD_ARGS=\$(grep -v '^#' .env | tr -d '\r' | xargs -I {} echo "--build-arg {}" | xargs)
+                                    BUILD_ARGS=\$(awk -F= '/^[a-zA-Z0-9_]+/ {print "--build-arg " \$1 "=" \$2}' .env | tr -d '\r' | xargs)
 
                                     docker build \$BUILD_ARGS \\
                                         -t ${serviceName}:latest \\
