@@ -8,13 +8,7 @@ pipeline {
                     deleteDir()
 
                     sh "git config --global --add safe.directory '*'"
-                    checkout scm
-
-                    sh "git rev-parse --short HEAD > .git_sha"
-
-                    sh "echo 'GIT_SHA sauvegardé : ' && cat .git_sha"
-
-                    
+                    checkout scm                    
                 }
             }
 

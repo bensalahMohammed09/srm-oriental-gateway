@@ -54,7 +54,7 @@ Thumbs.db
 .idea/
 *.swp
 
-src/wrokers/ocr-service/uploads/
+src/workers/ocr-service/uploads/
 
 
 

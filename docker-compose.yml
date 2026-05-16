@@ -115,6 +115,10 @@ services:
         SRM_GROUP_ID:  ${SRM_GROUP_ID}
         WORKER_ENV:    ${WORKER_ENV}
     container_name: srm-ocr-worker
+    environment:
+      - STORAGE_PENDING_PATH=/home/srm_worker/app/uploads/pending
+      - STORAGE_PROCESSED_PATH=/home/srm_worker/app/uploads/processed
+      - STORAGE_FAILED_PATH=/home/srm_worker/app/uploads/failed
     volumes:
       - ./src/workers/ocr-service/uploads:/home/srm_worker/app/uploads      
       # 2. LE NOUVEAU : Le volume pour le code en live (Live Reloading)
