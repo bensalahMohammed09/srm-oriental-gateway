@@ -102,20 +102,13 @@ def main():
     for f in changed_files:
         print(f"-> {f}")
 
-    # 5. Intelligence for "Facture" Traceability
-    # Validating environment integrity
-    pipeline_error = not os.path.exists('.env')
-    if pipeline_error:
-        print("\n[WARNING] .env file is missing! Pipeline may lack necessary credentials.")
-
     # 3. Standardized Versioning & Rollback Metadata
     deploy_tag = get_git_sha()
     rollback_tag = "stable"
     
     triggers = {
         "DEPLOY_TAG": deploy_tag,
-        "ROLLBACK_TAG": rollback_tag,
-        "PIPELINE_ERROR": str(pipeline_error).lower()
+        "ROLLBACK_TAG": rollback_tag
     }
 
     # Core Logic Base
