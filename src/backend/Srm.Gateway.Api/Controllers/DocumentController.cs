@@ -28,22 +28,22 @@ public class DocumentController(
     }
 
     [HttpPost("upload")]
-    public async Task<IActionResult> UploadDocument(IFormFile file)
+    public async Task<IActionResult> UploadDocument([FromForm] IFormFile file)
     {
+        // On garde la validation d'entrée de base
         if (file == null || file.Length == 0)
         {
             return BadRequest(new { detail = "Aucun fichier fourni." });
+
+            // Note: Si votre middleware gère aussi les erreurs 400 via des exceptions spécifiques, 
+            // vous pouvez remplacer le return ci-dessus par :
+            // throw new ArgumentException("Aucun fichier fourni.");
         }
 
-        try
-        {
-            await _commandService.SaveFileToPendingAsync(file);
-            return Ok(new { message = "Fichier uploadé avec succès dans le dossier pending.", fileName = file.FileName });
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { detail = $"Erreur lors de l'upload : {ex.Message}" });
-        }
+        // On laisse le middleware gérer les éventuelles exceptions (I/O, permissions, etc.)
+        await _commandService.SaveFileToPendingAsync(file);
+
+        return Ok(new { message = "Fichier uploadé avec succès.", fileName = file.FileName });
     }
     [HttpGet("pending-indexation")]
     [Authorize(Roles = "ROLE_BO")] 
