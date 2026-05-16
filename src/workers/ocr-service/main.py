@@ -3,6 +3,7 @@ import time
 import shutil
 import logging
 import re
+import uuid
 from pathlib import Path
 
 # Third-party libraries for OCR and Image Processing
@@ -21,12 +22,11 @@ from PIL import Image
 # CONFIGURATION & ENVIRONMENT SETUP
 # ==============================================================================
 API_URL = os.getenv("API_URL", "http://srm-api:9000/api/v1/document/ingest")
-UPLOAD_DIR = Path("uploads")
-PENDING_DIR = UPLOAD_DIR / "pending"
-PROCESSED_DIR = UPLOAD_DIR / "processed"
-FAILED_DIR = UPLOAD_DIR / "failed"
 
-# Core SRE Principle: Ensure infrastructure readiness on startup
+PENDING_DIR = Path(os.getenv("STORAGE_PENDING_PATH", "/app/uploads/pending"))
+PROCESSED_DIR = Path(os.getenv("STORAGE_PROCESSED_PATH", "/app/uploads/processed"))
+FAILED_DIR = Path(os.getenv("STORAGE_FAILED_PATH", "/app/uploads/failed"))
+
 for directory in [PENDING_DIR, PROCESSED_DIR, FAILED_DIR]:
     directory.mkdir(parents=True, exist_ok=True)
 
@@ -37,16 +37,12 @@ logger = logging.getLogger("srm_ocr_worker")
 logger.setLevel(logging.INFO)
 logHandler = logging.StreamHandler()
 
-# Using JSON formatter for structured logging - Loki va adorer ça
 formatter = jsonlogger.JsonFormatter(
     fmt='%(asctime)s %(levelname)s %(name)s %(message)s'
 )
 logHandler.setFormatter(formatter)
 logger.addHandler(logHandler)
 
-# ==============================================================================
-# NETWORK RESILIENCE (RETRY STRATEGY)
-# ==============================================================================
 def get_resilient_session():
     session = requests.Session()
     retry_strategy = Retry(
@@ -88,7 +84,7 @@ def parse_invoice_text(full_text: str, avg_confidence: float = 0.99) -> dict:
     amount_pattern = r'(?:Total|TTC|Montant)[\s:]*([\d\s]+[,.]\d{2})'
     amount_match = re.search(amount_pattern, full_text, re.IGNORECASE)
 
-    reference = ref_match.group(1) if ref_match else f"UNKNOWN-{int(time.time())}"
+    reference = ref_match.group(1) if ref_match else "REQUIRES_MANUAL_REVIEW"
     date_val = date_match.group(1) if date_match else "N/A"
     
     try:
@@ -99,7 +95,7 @@ def parse_invoice_text(full_text: str, avg_confidence: float = 0.99) -> dict:
 
     return {
         "reference": reference,
-        "supplierName": "SRM Oriental (Automatic Detection)", 
+        "supplierName": "SRM ORI (Automatic Detection)", 
         "totalAmount": total_amount,
         "metadata": [
             { "key": "Date", "value": date_val, "confidence": round(avg_confidence, 2) },
@@ -108,7 +104,7 @@ def parse_invoice_text(full_text: str, avg_confidence: float = 0.99) -> dict:
     }
 
 # ==============================================================================
-# ORCHESTRATION LAYER (MIS A JOUR POUR L'OBSERVABILITE)
+# ORCHESTRATION LAYER 
 # ==============================================================================
 def extract_data_from_document(file_path: Path, log_context: dict) -> dict:
     logger.info("Starting OCR extraction sequence", extra=log_context)
@@ -133,46 +129,59 @@ def extract_data_from_document(file_path: Path, log_context: dict) -> dict:
                 confidences.append(conf)
 
     avg_confidence = (sum(confidences) / len(confidences) / 100.0) if confidences else 0.0
+    
+    # 🌟 THE GARBAGE FILTER: Reject files with low confidence (e.g., non-documents)
+    if avg_confidence < 0.50:
+        raise ValueError(f"OCR confidence too low ({round(avg_confidence, 2)}). Image is likely unreadable or not a document.")
+
     payload = parse_invoice_text(full_text, avg_confidence)
     
+    # Inject standard metadata
     payload["metadata"].append({
         "key": "SourceFile", 
         "value": file_path.name, 
         "confidence": 1.0
     })
 
-    # On passe le log_context pour garder la trace
     logger.info("OCR extraction completed successfully", extra={
         **log_context, 
-        "avg_confidence": round(avg_confidence, 2)
+        "avg_confidence": round(avg_confidence, 2),
+        "extracted_reference": payload["reference"]
     })
     return payload
 
-def process_file(file_path: Path):
+def process_file(file_path: Path, log_context: dict):
     start_time = time.time()
     filename = file_path.name
-    
-    # 1. EXTRACTION DU CORRELATION ID
-    # On s'attend à ce que n8n nomme le fichier "1234abcd-5678_nomfichier.pdf"
-    parts = filename.split('_', 1)
-    correlation_id = parts[0] if len(parts) > 1 else "unknown-id"
-    
-    # Dictionnaire de base pour tous les logs de ce document
-    log_context = {"correlation_id": correlation_id, "file": filename}
+    correlation_id = log_context.get("correlation_id")
     
     try:
         # Step 1: Extract Data
         payload = extract_data_from_document(file_path, log_context)
         
-        # 2. CALCUL DE LA DUREE (Pour Dashboard Grafana RED)
+        # 🌟 NEW: Bind the extracted reference to the logging context!
+        # Now every subsequent log will have BOTH the UUID and the real Invoice Reference.
+        extracted_ref = payload.get("reference", "UNKNOWN")
+        log_context["document_reference"] = extracted_ref
+        
+        # 🌟 INJECT CORRELATION ID INTO PAYLOAD METADATA
+        payload["metadata"].append({
+            "key": "WorkerCorrelationId",
+            "value": correlation_id,
+            "confidence": 1.0
+        })
+        
         ocr_duration = int((time.time() - start_time) * 1000)
         logger.info("OCR Processing Metrics", extra={**log_context, "duration_ms": ocr_duration})
         
         # Step 2: Push to API
         logger.info("Dispatching payload to API", extra=log_context)
         
-        # 3. RENVOI DU CORRELATION ID A L'API
-        headers = {"X-Correlation-ID": correlation_id}
+        # 🌟 NEW: Pass the reference in the headers too, so the C# API can log it immediately!
+        headers = {
+            "X-Correlation-ID": correlation_id,
+            "X-Document-Reference": extracted_ref
+        }
         response = http_client.post(API_URL, json=payload, headers=headers, timeout=20)
         response.raise_for_status()
         
@@ -182,8 +191,13 @@ def process_file(file_path: Path):
         total_duration = int((time.time() - start_time) * 1000)
         logger.info("File successfully processed and archived", extra={**log_context, "total_duration_ms": total_duration})
 
+    except ValueError as ve:
+        # Catch our custom confidence error
+        logger.warning(f"Document rejected: {ve}", extra=log_context)
+        shutil.move(str(file_path), str(FAILED_DIR / filename))
     except requests.exceptions.RequestException as e:
         logger.error("API Communication Failure", extra={**log_context, "error": str(e)})
+        shutil.move(str(file_path), str(FAILED_DIR / filename))
     except Exception as e:
         logger.exception("Fatal processing error", extra={**log_context, "error": str(e)})
         shutil.move(str(file_path), str(FAILED_DIR / filename))
@@ -192,7 +206,7 @@ def process_file(file_path: Path):
 # MAIN SERVICE LOOP
 # ==============================================================================
 def main():
-    logger.info("SRM OCR Worker Service is active and monitoring 'pending' folder")
+    logger.info("SRM OCR Worker Service is active", extra={"monitored_path": str(PENDING_DIR.resolve())})
     
     while True:
         valid_extensions = ['.pdf', '.png', '.jpg', '.jpeg']
@@ -202,9 +216,16 @@ def main():
             time.sleep(5)
             continue
             
-        logger.info(f"Detected {len(files)} new document(s) for processing")
+        logger.info(f"Detected {len(files)} new document(s) in pending folder")
+        
         for file_path in files:
-            process_file(file_path)
+            # 🌟 GENERATE A UNIQUE CORRELATION ID FOR OBSERVABILITY
+            correlation_id = str(uuid.uuid4())
+            
+            log_context = {"correlation_id": correlation_id, "file": file_path.name}
+            logger.info("Picked up file for processing", extra=log_context)
+            
+            process_file(file_path, log_context)
 
 if __name__ == "__main__":
     main()
