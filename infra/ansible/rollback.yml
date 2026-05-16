@@ -1,0 +1,18 @@
+---
+- name: SRM Oriental - EMERGENCY ROLLBACK
+  hosts: all
+  become: yes
+
+  vars:
+    # 🚨 HARDCODED PARACHUTE: Always pull the stable tag
+    image_tag: "stable"
+    
+    # Jenkins will inject this so we only roll back what actually broke
+    target_services: ""
+    
+    # Flag to let the role know this is an emergency
+    is_rollback: true
+
+  # Execute the exact same role, but with the :stable tag forced
+  roles:
+    - role: srm_app

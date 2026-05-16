@@ -1,0 +1,66 @@
+---
+# ==============================================================================
+# 1. FILE SYSTEM PREPARATION & TEMPLATING
+# ==============================================================================
+- name: Ensure nginx configuration directory exists
+  ansible.builtin.file:
+    path: "{{ project_root }}/nginx"
+    state: directory
+    mode: '0755'
+
+- name: Template nginx security headers
+  ansible.builtin.template:
+    src: security_headers.conf.j2
+    dest: "{{ project_root }}/nginx/security_headers.conf"
+    mode: '0644'
+
+- name: Template nginx configuration
+  ansible.builtin.template:
+    src: public.conf.j2
+    dest: "{{ project_root }}/nginx/public.conf"
+    mode: '0644'      
+
+- name: Template Unified Docker Compose file 
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ project_root }}/docker-compose.yml"
+    mode: '0644'
+
+# ==============================================================================
+# 2. SURGICAL DEPLOYMENT (PULL & UP)
+# ==============================================================================
+- name: Pull target images from Docker Hub
+  ansible.builtin.command: "docker compose -f {{ project_root }}/docker-compose.yml pull {{ target_services }}"
+  args:
+    chdir: "{{ project_root }}"
+
+- name: Execute Surgical Update (Recreate only changed services)
+  ansible.builtin.command: "docker compose -f {{ project_root }}/docker-compose.yml up -d --remove-orphans {{ target_services }}"
+  args:
+    chdir: "{{ project_root }}"
+
+- name: Give containers 15 seconds to boot up and stabilize
+  ansible.builtin.pause:
+    seconds: 15
+
+# ==============================================================================
+# 3. INTERNAL SRE PROBING (VERIFICATION)
+# ==============================================================================
+- name: Internal Probe (Check API internally via service:port)
+  ansible.builtin.command: "docker exec {{ dashboard_service_name }} curl -f http://{{ api_service_name }}:{{ api_internal_port }}/health"
+  register: api_health
+  retries: 3
+  delay: 5
+  until: api_health.rc == 0
+  when: "api_service_name in target_services"
+
+- name: Verify OCR Worker Process is Alive
+  # We use -q (quiet) to get the container ID. If it's empty, it crashed.
+  ansible.builtin.command: docker ps -q -f "name={{ ocr_service_name }}" -f "status=running"
+  register: ocr_status
+  failed_when: ocr_status.stdout == ""
+  when: "ocr_service_name in target_services"
+
+- name: Report Deployment Status
+  ansible.builtin.debug:
+    msg: "Deployment Successful! Services verified and running."

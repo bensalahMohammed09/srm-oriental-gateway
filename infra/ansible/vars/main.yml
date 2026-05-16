@@ -1,0 +1,46 @@
+---
+# =====================================================================================
+#  SRM Oriental Full Stack Configuration
+# =====================================================================================
+
+# --- Infrastructure ---
+project_root: "/opt/srm-oriental"
+
+# Replace 'your_dockerhub_username' with your actual Docker Hub ID
+dockerhub_user: "bensalahmohammed" 
+
+# These two will be dynamically injected by Jenkins using `-e` during the pipeline
+image_tag: "stable" 
+target_services: "srm-dashboard srm-api srm-ocr-worker"
+
+# --- Networks ---
+public_network_name: "web-net"
+backend_network_name: "back-net"
+
+# --- Service Naming & Ports ---
+dashboard_service_name: "srm-dashboard"
+dashboard_external_port: 80
+dashboard_internal_port: 8080
+domain_name: "localhost"
+
+api_service_name: "srm-api"
+api_internal_port: 9000
+
+ocr_service_name: "srm-ocr-worker"
+
+# --- Resource Limits ---
+dashboard_memory_limit: "128m"
+dashboard_cpu_limit: "0.5"
+
+# --- Nginx Specifics ---
+nginx_client_max_body_size: "50m"
+nginx_proxy_read_timeout: "300s"
+nginx_proxy_connect_timeout: "300s"
+docker_dns_resolver: "127.0.0.11"
+docker_dns_valid_time: 30
+
+# --- Database Configuration ---
+postgres_user: "srm_admin"
+postgres_password: "SuperSecretPassword123"
+postgres_db: "srm_db"
+db_internal_port: "5432"

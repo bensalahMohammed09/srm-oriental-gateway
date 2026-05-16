@@ -8,7 +8,6 @@ base_dir: "/opt/srm-oriental"
 infra_dir: "{{ base_dir }}/infra"
 nginx_dir: "{{ base_dir }}/nginx"
 promtail_dir: "{{ base_dir }}/promtail"
-upload_dir: "{{ base_dir }}/uploads"
 
 backup_root: "{{ base_dir }}/backups"
 db_backup_dir: "{{ base_dir }}/postgres"

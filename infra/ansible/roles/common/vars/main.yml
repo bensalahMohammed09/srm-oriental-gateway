@@ -36,7 +36,6 @@ common_mandatory_subdirs:
   - "{{ infra_dir }}"
   - "{{ nginx_dir }}"
   - "{{ promtail_dir }}"
-  - "{{ upload_dir }}"
   - "{{ backup_root }}"
   - "{{ db_backup_dir }}"
 

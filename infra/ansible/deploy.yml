@@ -1,0 +1,14 @@
+---
+- name: SRM Oriental - Surgical Deployment
+  hosts: all
+  become: yes
+
+  # These are placeholders. Jenkins will overwrite them using the -e flag.
+  vars:
+    image_tag: "latest"
+    target_services: ""
+    is_rollback: false
+
+  # Simply execute the industrial role
+  roles:
+    - role: srm_app
