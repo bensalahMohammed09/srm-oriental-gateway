@@ -11,4 +11,5 @@
 
   # Simply execute the industrial role
   roles:
+    - role: common
     - role: srm_app

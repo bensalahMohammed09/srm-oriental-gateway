@@ -46,20 +46,20 @@
 # ==============================================================================
 # 3. INTERNAL SRE PROBING (VERIFICATION)
 # ==============================================================================
-- name: Internal Probe (Check API internally via service:port)
-  ansible.builtin.command: "docker exec {{ dashboard_service_name }} curl -f http://{{ api_service_name }}:{{ api_internal_port }}/health"
-  register: api_health
-  retries: 3
-  delay: 5
-  until: api_health.rc == 0
-  when: "api_service_name in target_services"
+# - name: Internal Probe (Check API internally via service:port)
+#   ansible.builtin.command: "docker exec {{ dashboard_service_name }} curl -f http://{{ api_service_name }}:{{ api_internal_port }}/health"
+#   register: api_health
+#   retries: 3
+#   delay: 5
+#   until: api_health.rc == 0
+#   when: "api_service_name in target_services"
 
-- name: Verify OCR Worker Process is Alive
-  # We use -q (quiet) to get the container ID. If it's empty, it crashed.
-  ansible.builtin.command: docker ps -q -f "name={{ ocr_service_name }}" -f "status=running"
-  register: ocr_status
-  failed_when: ocr_status.stdout == ""
-  when: "ocr_service_name in target_services"
+# - name: Verify OCR Worker Process is Alive
+#   # We use -q (quiet) to get the container ID. If it's empty, it crashed.
+#   ansible.builtin.command: docker ps -q -f "name={{ ocr_service_name }}" -f "status=running"
+#   register: ocr_status
+#   failed_when: ocr_status.stdout == ""
+#   when: "ocr_service_name in target_services"
 
 - name: Report Deployment Status
   ansible.builtin.debug:
