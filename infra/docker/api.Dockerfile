@@ -39,15 +39,21 @@ ENV ASPNETCORE_ENVIRONMENT=${API_ENV}
 ENV ASPNETCORE_HTTP_PORTS=${API_INTERNAL_PORT}
 ENV DOTNET_CLI_TELEMETRY_OPTOUT=1
 
+# Copy artifacts from the build-env stage
+# We copy them as root first to configure file system permissions safely.
+COPY --from=build-env /out .
+
+# 🛡️ SECURITY HARDENING: Remove write permissions from all executable binaries and assemblies.
+# - 'chmod -R a-w .' removes write ('w') permissions for all users (User, Group, Others).
+# - 'chmod -R a+rX .' ensures that files remain readable ('r') and directories/executables remain executable ('X').
+RUN chmod -R a-w . && \
+    chmod -R a+rX .
 
 # Security: Switch to the built-in non-root 'app' user
+# The 'app' user can read and execute the assemblies perfectly, but cannot modify/write to them.
 USER app
-
-# Copy artifacts and apply ownership to the 'app' user
-COPY --from=build-env --chown=app:app /out .
 
 # Document the port
 EXPOSE ${API_INTERNAL_PORT}
-
 
 ENTRYPOINT ["dotnet", "Srm.Gateway.Api.dll"]

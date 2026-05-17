@@ -52,7 +52,7 @@ pipeline {
                                 dotnet sonarscanner begin /k:"srm-backend" \
                                 /d:sonar.login="${SONAR_TOKEN}" \
                                 /d:sonar.host.url=http://sonarqube:9002 \
-                                /d:sonar.exclusions="**/frontend/**,**/node_modules/**,**/*.js,**/*.ts,**/*.tsx,**/*.jsx,**/*.html,**/*.css"
+                                /d:sonar.exclusions="**/frontend/**,**/node_modules/**,**/*.js,**/*.ts,**/*.tsx,**/*.jsx,**/*.html,**/*.css,**/*Dockerfile,**/*.Dockerfile,**/*.yml,**/*.yaml"
 
                                 dotnet build src/backend/Srm.Gateway.sln --configuration Release
                                 dotnet sonarscanner end /d:sonar.login="${SONAR_TOKEN}"
