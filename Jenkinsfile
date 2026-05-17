@@ -34,6 +34,44 @@ pipeline {
             }
         }
 
+        stage('2. Backend Analysis with SonarQube') {
+        when { 
+            expression { env.RUN_SONAR_BACKEND == "true" } 
+        }
+        steps {
+            script {
+                try {
+                    sh "docker start sonar-db sonarqube"
+                    
+                    sh 'timeout 120s bash -c "until curl -s http://sonarqube:9002/api/system/status | grep -q UP; do sleep 5; done"'
+
+                    echo "Running SonarQube analysis for Backend..."
+                    withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
+                        withSonarQubeEnv('sonarqube') {
+                            sh """
+                                dotnet sonarscanner begin /k:"srm-backend" \
+                                /d:sonar.login="${SONAR_TOKEN}" \
+                                /d:sonar.host.url=http://sonarqube:9002 \
+                                /d:sonar.exclusions="**/frontend/**,**/node_modules/**,**/*.js,**/*.ts,**/*.tsx,**/*.jsx,**/*.html,**/*.css"
+
+                                dotnet build src/backend/Srm.Gateway.sln --configuration Release
+                                dotnet sonarscanner end /d:sonar.login="${SONAR_TOKEN}"
+                            """
+                        }
+                    }
+
+                    timeout(time: 5, unit: 'MINUTES') {
+                        def qg = waitForQualityGate()
+                        if (qg.status != 'OK') {
+                            error "SonarQube Quality Gate failed: ${qg.status}"
+                        }
+                    }
+                } finally {
+                    sh "docker stop sonar-db sonarqube || true"
+                }
+            } // Closes script
+        } // Closes steps
+    } // Closes stage
         
 
         stage('3. Frontend & Worker Scan') {
