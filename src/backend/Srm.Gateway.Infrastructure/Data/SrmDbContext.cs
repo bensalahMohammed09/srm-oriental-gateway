@@ -16,14 +16,14 @@ public class SrmDbContext : IdentityDbContext<IdentityUser<Guid>, IdentityRole<G
     public DbSet<Workflow> Workflows { get; set; }
     public DbSet<AuditLog> AuditLogs { get; set; }
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    protected override void OnModelCreating(ModelBuilder Builder)
     {
-        base.OnModelCreating(modelBuilder);
+        base.OnModelCreating(Builder);
 
         // 🌟 LE FIX MAGIQUE POUR POSTGRESQL QUE TU AVAIS OUBLIÉ 🌟
         // Force PostgreSQL à mettre une valeur par défaut pour TOUTES les colonnes RowVersion
         // Cela empêche le crash 23502 (NOT NULL constraint) lors du DataSeeder
-        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        foreach (var entityType in Builder.Model.GetEntityTypes())
         {
             var rowVersionProp = entityType.FindProperty("RowVersion");
             if (rowVersionProp != null && rowVersionProp.ClrType == typeof(byte[]))
@@ -33,7 +33,7 @@ public class SrmDbContext : IdentityDbContext<IdentityUser<Guid>, IdentityRole<G
         }
 
         // Configuration avancée de l'entité Document (JSONB + GIN)
-        modelBuilder.Entity<Document>(entity =>
+        Builder.Entity<Document>(entity =>
         {
             entity.ToTable("documents");
             entity.HasIndex(d => d.Reference).IsUnique();
@@ -50,12 +50,12 @@ public class SrmDbContext : IdentityDbContext<IdentityUser<Guid>, IdentityRole<G
         });
 
         // --- Relations existantes ---
-        modelBuilder.Entity<Workflow>()
+        Builder.Entity<Workflow>()
             .HasOne(w => w.Document)
             .WithMany(d => d.Workflows)
             .HasForeignKey(w => w.DocumentId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        modelBuilder.Entity<Status>().HasIndex(s => s.Code).IsUnique();
+        Builder.Entity<Status>().HasIndex(s => s.Code).IsUnique();
     }
 }

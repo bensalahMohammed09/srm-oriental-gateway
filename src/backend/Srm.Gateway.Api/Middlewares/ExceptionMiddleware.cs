@@ -23,6 +23,11 @@ namespace Srm.Gateway.Api.Middlewares
             _next = next;
             _logger = logger;
         }
+
+        private static readonly JsonSerializerOptions _jsonOptions = new()
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
         public async Task InvokeAsync(HttpContext context)
         {
             // 1. EXTRACT OR GENERATE CORRELATION ID
@@ -85,8 +90,8 @@ namespace Srm.Gateway.Api.Middlewares
             // Le jury verra que l'API frontend reçoit un ID de suivi technique pour le support.
             problemDetails.Extensions.Add("correlationId", correlationId);
 
-            var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-            return context.Response.WriteAsync(JsonSerializer.Serialize(problemDetails, options));
+
+            return context.Response.WriteAsync(JsonSerializer.Serialize(problemDetails, _jsonOptions));
         }
 
         private static string GetTitleForStatusCode(int statusCode) => statusCode switch

@@ -171,7 +171,7 @@ if (app.Environment.IsDevelopment())
         options.WithTitle("SRM Oriental Gateway API")
                .WithTheme(ScalarTheme.Mars)
                .WithDefaultHttpClient(ScalarTarget.CSharp, ScalarClient.HttpClient);
-        options.WithPreferredScheme("http");
+        options.AddPreferredSecuritySchemes("http");
     });
 }
 
@@ -180,4 +180,7 @@ app.MapMetrics().AllowAnonymous(); // Endpoint Prometheus sans auth
 
 app.Run();
 
-public partial class Program { }
+public partial class Program
+{
+    protected Program() { }
+}

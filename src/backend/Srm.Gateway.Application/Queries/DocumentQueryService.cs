@@ -91,7 +91,7 @@ public class DocumentQueryService : IDocumentQueryService
         return document == null ? null : _mapper.Map<DocumentResponse>(document);
     }
 
-    public async Task<DocumentIndexationResponse> GetDocumentDetailsAsync(Guid id)
+    public async Task<DocumentIndexationResponse?> GetDocumentDetailsAsync(Guid id)
     {
         var document = await _unitOfWork.Documents.GetByIdAsync(id)
             ?? throw new KeyNotFoundException($"Le document avec l'ID {id} est introuvable.");
@@ -106,7 +106,7 @@ public class DocumentQueryService : IDocumentQueryService
             document.RowVersion ?? Array.Empty<byte>(),
             document.Metadata?.ToDictionary(
                 kvp => kvp.Key,
-                kvp => new MetadataValueDto(kvp.Value.Value?.ToString(), kvp.Value.Confidence)
+                kvp => new MetadataValueDto(kvp.Value.Value?.ToString() ?? string.Empty, kvp.Value.Confidence)
             ) ?? new Dictionary<string, MetadataValueDto>()
         );
 
@@ -147,9 +147,9 @@ public class DocumentQueryService : IDocumentQueryService
         return new FileDownloadDto(fileData.Stream, fileData.ContentType, fileName);
     }
 
-    public async Task<FileDownloadDto> GetFailedDocumentFileAsync(string fn)
+    public async Task<FileDownloadDto> GetFailedDocumentFileAsync(string fileName)
     {
-        var data = await _fileStorage.GetFileStreamAsync(fn, StorageFolder.Failed);
-        return new FileDownloadDto(data.Stream, data.ContentType, fn);
+        var data = await _fileStorage.GetFileStreamAsync(fileName, StorageFolder.Failed);
+        return new FileDownloadDto(data.Stream, data.ContentType, fileName);
     }
 }

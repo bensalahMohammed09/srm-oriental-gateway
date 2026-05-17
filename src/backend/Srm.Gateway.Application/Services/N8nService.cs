@@ -50,7 +50,8 @@ public class N8nService : IN8nService
         // 2. On "force" l'association en mémoire pour éviter les NULL
         foreach (var doc in allDocs)
         {
-            doc.Status = allStatuses.FirstOrDefault(s => s.Id == doc.StatusId);
+            doc.Status = allStatuses.FirstOrDefault(s => s.Id == doc.StatusId)
+             ?? throw new InvalidOperationException($"Status with ID {doc.StatusId} not found.");
             doc.Category = allCategories.FirstOrDefault(c => c.Id == doc.CategoryId);
         }
 
@@ -87,9 +88,9 @@ public class N8nService : IN8nService
             });
     }
 
-    public async Task<bool> IncrementLevelAsync(Guid id)
+    public async Task<bool> IncrementLevelAsync(Guid documentId)
     {
-        var doc = await _uow.Documents.GetByIdAsync(id);
+        var doc = await _uow.Documents.GetByIdAsync(documentId);
         if (doc == null) return false;
 
         doc.EscalationLevel += 1;

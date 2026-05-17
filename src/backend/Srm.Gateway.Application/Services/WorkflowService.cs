@@ -18,27 +18,20 @@ public class WorkflowService : IWorkflowService
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly RoleManager<IdentityRole<Guid>> _roleManager;
     private readonly IFileStorageService _fileStorage;
+    private readonly IWorkflowEngineHelper _engineHelper;
 
-    public WorkflowService(IUnitOfWork unitOfWork, IHttpContextAccessor httpContextAccessor, RoleManager<IdentityRole<Guid>> roleManager, IFileStorageService fileStorage)
+    public WorkflowService(
+        IUnitOfWork unitOfWork,
+        IHttpContextAccessor httpContextAccessor,
+        RoleManager<IdentityRole<Guid>> roleManager,
+        IFileStorageService fileStorage,
+        IWorkflowEngineHelper engineHelper)
     {
         _unitOfWork = unitOfWork;
         _httpContextAccessor = httpContextAccessor;
         _roleManager = roleManager;
         _fileStorage = fileStorage;
-    }
-
-    // 🌟 ROUTAGE PARALLÈLE
-    private string[] GetTargetRoles(string? categoryName)
-    {
-        var normalized = categoryName?.ToUpperInvariant() ?? "";
-
-        if (normalized.Contains("INFORMATIQUE") || normalized.Contains("TELECOM") || normalized.Contains("TÉLÉCOM"))
-            return new[] { "ROLE_TECH", "ROLE_FINANCE" };
-
-        if (normalized.Contains("MAINTENANCE") || normalized.Contains("TRAVAUX"))
-            return new[] { "ROLE_MAINTENANCE", "ROLE_DIRECTOR", "ROLE_FINANCE" };
-
-        return new[] { "ROLE_FINANCE" };
+        _engineHelper = engineHelper;
     }
 
     public async Task StartProcessAsync(Guid documentId, string? initialComment)
@@ -51,7 +44,6 @@ public class WorkflowService : IWorkflowService
 
         var boRole = await _roleManager.Roles.FirstOrDefaultAsync(r => r.Name == "ROLE_BO");
 
-        // Ce Workflow d'indexation marque "le début du round/cycle" actuel
         await _unitOfWork.Workflows.AddAsync(new Workflow
         {
             Id = Guid.NewGuid(),
@@ -71,7 +63,6 @@ public class WorkflowService : IWorkflowService
 
     public Task RejectStepAsync(Guid documentId, string reason) => RegisterVoteAsync(documentId, reason, false);
 
-    // 🌟 LE MOTEUR DE CONSENSUS AVEC GESTION DES CYCLES
     private async Task RegisterVoteAsync(Guid documentId, string? comment, bool isApproved)
     {
         var document = await _unitOfWork.Documents.FindByCondition(d => d.Id == documentId, trackChanges: true)
@@ -79,21 +70,17 @@ public class WorkflowService : IWorkflowService
             .Include(d => d.Workflows).ThenInclude(w => w.AssignedRole)
             .FirstOrDefaultAsync() ?? throw new KeyNotFoundException("Document introuvable.");
 
-        var targetRoles = GetTargetRoles(document.Category?.Name);
+        var targetRoles = _engineHelper.GetTargetRoles(document.Category?.Name);
         var userRoles = GetUserRoles();
 
-        var myRoleName = userRoles.FirstOrDefault(r => targetRoles.Contains(r));
+        var myRoleName = userRoles.Find(r => targetRoles.Contains(r));
 
         if (myRoleName == null)
             throw new InvalidOperationException("Vous n'êtes pas autorisé à valider ce document ou n'êtes pas dans le circuit.");
 
-        // 🌟 IDENTIFIER LE DÉBUT DU CYCLE ACTUEL
-        var currentCycleStart = document.Workflows
-            .Where(w => w.CurrentStatus == "BUS_PENDING_VAL")
-            .Max(w => (DateTime?)w.ValidatedAt) ?? document.CreatedAt;
+        var currentCycleStart = _engineHelper.GetCurrentCycleStart(document);
 
-        // On vérifie s'il a voté DANS CE CYCLE
-        if (document.Workflows.Any(w => w.AssignedRole?.Name == myRoleName && (w.CurrentStatus == "APPROVED" || w.CurrentStatus == "REJECTED") && w.ValidatedAt >= currentCycleStart))
+        if (_engineHelper.HasUserVotedInCurrentCycle(document, myRoleName, currentCycleStart))
             throw new InvalidOperationException("Vous avez déjà pris une décision pour ce dossier dans le cycle actuel.");
 
         var role = await _roleManager.Roles.FirstOrDefaultAsync(r => r.Name == myRoleName);
@@ -112,7 +99,6 @@ public class WorkflowService : IWorkflowService
             Comment = comment ?? string.Empty
         });
 
-        // 🌟 ON NE PREND QUE LES VOTES DU CYCLE ACTUEL POUR LE CONSENSUS
         var existingVotes = document.Workflows
             .Where(w => (w.CurrentStatus == "APPROVED" || w.CurrentStatus == "REJECTED") && w.ValidatedAt >= currentCycleStart)
             .Select(w => w.AssignedRole?.Name)
@@ -132,7 +118,6 @@ public class WorkflowService : IWorkflowService
 
             allStatuses.Add(stepStatus);
 
-            // Règle métier : Si un seul rejette dans CE CYCLE, c'est REJETÉ globalement
             bool anyRejected = allStatuses.Any(s => s == "REJECTED");
             string finalStatusCode = anyRejected ? "REJECTED" : "APPROVED";
 
@@ -161,13 +146,19 @@ public class WorkflowService : IWorkflowService
         {
             await _unitOfWork.CompleteAsync();
         }
-        catch (DbUpdateException ex) { throw new Exception($"Erreur SQL: {ex.InnerException?.Message ?? ex.Message}"); }
+        catch (DbUpdateException ex)
+        {
+            // Fixed raw System.Exception code smell (S112)
+            throw new InvalidOperationException($"Erreur SQL: {ex.InnerException?.Message ?? ex.Message}");
+        }
     }
 
     public async Task<IEnumerable<DocumentResponse>> GetMyPendingTasksAsync()
     {
         var roles = GetUserRoles();
-        if (!roles.Any()) return Enumerable.Empty<DocumentResponse>();
+
+        // Fixed S3267: Prefer comparing 'Count' to 0 for lists over '.Any()'
+        if (roles.Count == 0) return Enumerable.Empty<DocumentResponse>();
 
         var pendingStatus = await _unitOfWork.Repository<Status>().FindByCondition(s => s.Code == "BUS_PENDING_VAL").AsNoTracking().FirstOrDefaultAsync();
         var rejectedStatus = await _unitOfWork.Repository<Status>().FindByCondition(s => s.Code == "REJECTED").AsNoTracking().FirstOrDefaultAsync();
@@ -186,43 +177,34 @@ public class WorkflowService : IWorkflowService
 
         foreach (var doc in activeDocs)
         {
-            if (doc.StatusId == pendingStatus.Id)
-            {
-                var targetRoles = GetTargetRoles(doc.Category?.Name);
-                var myTargetRole = roles.FirstOrDefault(r => targetRoles.Contains(r));
+            // Guard 1: Ignore documents that are not currently in the validation pending state
+            if (doc.StatusId != pendingStatus.Id) continue;
 
-                if (myTargetRole != null)
-                {
-                    // 🌟 IDENTIFIER LE DÉBUT DU CYCLE ACTUEL (Ignorer les anciens rejets)
-                    var currentCycleStart = doc.Workflows
-                        .Where(w => w.CurrentStatus == "BUS_PENDING_VAL")
-                        .Max(w => (DateTime?)w.ValidatedAt) ?? doc.CreatedAt;
+            var targetRoles = _engineHelper.GetTargetRoles(doc.Category?.Name);
 
-                    bool hasVoted = doc.Workflows.Any(w => w.AssignedRole?.Name == myTargetRole && (w.CurrentStatus == "APPROVED" || w.CurrentStatus == "REJECTED") && w.ValidatedAt >= currentCycleStart);
+            // Fixed S6602: Prefer '.Find' over '.FirstOrDefault' for List lookup
+            var myTargetRole = roles.Find(r => targetRoles.Contains(r));
 
-                    if (!hasVoted)
-                    {
-                        var approvalsDict = new Dictionary<string, string>();
-                        foreach (var targetRole in targetRoles)
-                        {
-                            var vote = doc.Workflows
-                                .OrderByDescending(w => w.ValidatedAt)
-                                .FirstOrDefault(w => w.AssignedRole?.Name == targetRole && (w.CurrentStatus == "APPROVED" || w.CurrentStatus == "REJECTED") && w.ValidatedAt >= currentCycleStart);
+            // Guard 2: Ignore if current user holds no validation role in this circuit
+            if (myTargetRole == null) continue;
 
-                            approvalsDict[targetRole] = vote != null ? vote.CurrentStatus : "WAITING";
-                        }
+            var currentCycleStart = _engineHelper.GetCurrentCycleStart(doc);
 
-                        myTasks.Add(new DocumentResponse(
-                            doc.Id,
-                            doc.Reference,
-                            doc.Status?.Code ?? "UNKNOWN",
-                            doc.Category?.Name,
-                            doc.CreatedAt,
-                            approvalsDict
-                        ));
-                    }
-                }
-            }
+            bool hasVoted = _engineHelper.HasUserVotedInCurrentCycle(doc, myTargetRole, currentCycleStart);
+
+            // Guard 3: Ignore if the user has already submitted their vote inside this cycle
+            if (hasVoted) continue;
+
+            var approvalsDict = _engineHelper.BuildApprovalsDictionary(doc, targetRoles, currentCycleStart);
+
+            myTasks.Add(new DocumentResponse(
+                doc.Id,
+                doc.Reference,
+                doc.Status?.Code ?? "UNKNOWN",
+                doc.Category?.Name,
+                doc.CreatedAt,
+                approvalsDict
+            ));
         }
 
         return myTasks.OrderByDescending(d => d.CreatedAt);

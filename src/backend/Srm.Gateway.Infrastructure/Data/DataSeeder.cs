@@ -1,45 +1,91 @@
-﻿using Microsoft.EntityFrameworkCore;
-using Srm.Gateway.Domain.Entities;
+﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace Srm.Gateway.Infrastructure.Data
 {
-    public static class DataSeeder
+    public static class IdentitySeeder
     {
-        public static async Task SeedLookupDataAsync(SrmDbContext context)
+        public static async Task SeedRolesAndAdminAsync(IServiceProvider serviceProvider)
         {
-            // 1. Seed des Status (Indispensable pour l'ingestion)
-            if (!await context.Statuses.AnyAsync())
-            {
-                var statuses = new List<Status>
-            {
-                new() { Id = Guid.NewGuid(), Name = "En attente d'indexation", Code = "TECH_TO_INDEX" },
-                new() { Id = Guid.NewGuid(), Name = "En attente de validation métier", Code = "BUS_PENDING_VAL" },
-                new() { Id = Guid.NewGuid(), Name = "Validé", Code = "APPROVED" },
-                new() { Id = Guid.NewGuid(), Name = "Rejeté", Code = "REJECTED" }
-            };
+            var roleManager = serviceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
+            var userManager = serviceProvider.GetRequiredService<UserManager<IdentityUser<Guid>>>();
 
-                await context.Statuses.AddRangeAsync(statuses);
+            string[] roles = { "ROLE_ADMIN", "ROLE_BO", "ROLE_FINANCE", "ROLE_TECH" };
+
+            foreach (var roleName in roles)
+            {
+                if (!await roleManager.RoleExistsAsync(roleName))
+                {
+                    await roleManager.CreateAsync(new IdentityRole<Guid>(roleName));
+                }
             }
 
-            // 2. Seed des Catégories (Indispensable pour la validation)
-            if (!await context.Categories.AnyAsync())
+            var testUsers = new Dictionary<string, string>
             {
-                var categories = new List<Category>
-            {
-                new() { Id = Guid.NewGuid(), Name = "Maintenance & Travaux", Description = "Factures liées aux infrastructures" },
-                new() { Id = Guid.NewGuid(), Name = "Logistique & Transport", Description = "Frais de déplacement et flotte" },
-                new() { Id = Guid.NewGuid(), Name = "Informatique & Télécom", Description = "Abonnements et matériels" }
+                { "admin@srm.ma", "ROLE_ADMIN" },
+                { "bo@srm.ma", "ROLE_BO" },
+                { "finance@srm.ma", "ROLE_FINANCE" },
+                { "tech@srm.ma", "ROLE_TECH" }
             };
 
-                await context.Categories.AddRangeAsync(categories);
+            var defaultPassword = "Srm_Test_2026!";
+
+            foreach (var userKvp in testUsers)
+            {
+                await SeedSingleUserAsync(userManager, userKvp.Key, userKvp.Value, defaultPassword);
+            }
+        }
+
+        private static async Task SeedSingleUserAsync(
+            UserManager<IdentityUser<Guid>> userManager,
+            string email,
+            string role,
+            string defaultPassword)
+        {
+            var user = await userManager.FindByEmailAsync(email);
+
+            if (user != null)
+            {
+                await EnsureUserHasRoleAsync(userManager, user, role);
+                return;
             }
 
-            await context.SaveChangesAsync();
+            var newUser = new IdentityUser<Guid>
+            {
+                UserName = email,
+                Email = email,
+                EmailConfirmed = true
+            };
+
+            var result = await userManager.CreateAsync(newUser, defaultPassword);
+            if (!result.Succeeded)
+            {
+                var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                throw new InvalidOperationException($"[SEEDER FATAL] Failed to create user {email}. Reasons: {errors}");
+            }
+
+            var roleResult = await userManager.AddToRoleAsync(newUser, role);
+            if (!roleResult.Succeeded)
+            {
+                var errors = string.Join(", ", roleResult.Errors.Select(e => e.Description));
+                throw new InvalidOperationException($"[SEEDER FATAL] User created but failed to assign role {role} to {email}: {errors}");
+            }
+        }
+
+        private static async Task EnsureUserHasRoleAsync(
+            UserManager<IdentityUser<Guid>> userManager,
+            IdentityUser<Guid> user,
+            string role)
+        {
+            var currentRoles = await userManager.GetRolesAsync(user);
+            if (!currentRoles.Contains(role))
+            {
+                await userManager.AddToRoleAsync(user, role);
+            }
         }
     }
 }

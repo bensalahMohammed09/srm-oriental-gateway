@@ -30,7 +30,7 @@ public class DocumentCommandService : IDocumentCommandService
 
         if (document.RowVersion != null && request.RowVersion != null && !document.RowVersion.SequenceEqual(request.RowVersion))
         {
-            throw new Exception("Conflit de modification : Ce document a déjà été modifié par un autre utilisateur. Veuillez rafraîchir la page.");
+            throw new InvalidOperationException("Conflit de modification : Ce document a déjà été modifié par un autre utilisateur. Veuillez rafraîchir la page.");
         }
 
         document.SupplierName = request.SupplierName;
@@ -39,7 +39,7 @@ public class DocumentCommandService : IDocumentCommandService
         {
             document.Metadata = request.NewMetadata.ToDictionary(
                 kvp => kvp.Key,
-                kvp => new DocumentFieldValue { Value = kvp.Value.Value?.ToString(), Confidence = kvp.Value.Confidence }
+                kvp => new DocumentFieldValue { Value = kvp.Value.Value?.ToString() ?? string.Empty, Confidence = kvp.Value.Confidence }
             );
         }
 
@@ -49,10 +49,10 @@ public class DocumentCommandService : IDocumentCommandService
 
         var status = await _unitOfWork.Repository<Status>()
             .FindByCondition(s => s.Code == "BUS_PENDING_VAL")
-            .FirstOrDefaultAsync() ?? throw new Exception("Statut cible introuvable.");
+            .FirstOrDefaultAsync() ?? throw new InvalidOperationException("Statut cible introuvable.");
 
         document.StatusId = status.Id;
-        document.RowVersion = request.RowVersion;
+        document.RowVersion = request.RowVersion ?? Array.Empty<byte>();
 
         try
         {
@@ -63,7 +63,7 @@ public class DocumentCommandService : IDocumentCommandService
         }
         catch (DbUpdateConcurrencyException)
         {
-            throw new Exception("Conflit de modification détecté par la base de données.");
+            throw new InvalidOperationException("Conflit de modification détecté par la base de données.");
         }
     }
 
@@ -75,14 +75,14 @@ public class DocumentCommandService : IDocumentCommandService
 
         var initialMetadata = request.Metadata?.ToDictionary(
             m => m.Key,
-            m => new DocumentFieldValue { Value = m.Value.Value?.ToString(), Confidence = 1.0 }
+            m => new DocumentFieldValue { Value = m.Value?.ToString() ?? string.Empty, Confidence = 1.0 }
         ) ?? new Dictionary<string, DocumentFieldValue>();
 
         var document = new Document
         {
             Id = Guid.NewGuid(),
             Reference = request.Reference,
-            SupplierName = request.SupplierName,
+            SupplierName = request.SupplierName ?? string.Empty,
             TotalAmount = request.TotalAmount,
             CategoryId = request.CategoryId,
             StatusId = status.Id,
@@ -105,23 +105,23 @@ public class DocumentCommandService : IDocumentCommandService
     {
         var status = await _unitOfWork.Repository<Status>()
             .FindByCondition(s => s.Code == "TECH_TO_INDEX")
-            .FirstOrDefaultAsync() ?? throw new Exception("Le statut TECH_TO_INDEX n'existe pas en base de données.");
+            .FirstOrDefaultAsync() ?? throw new InvalidOperationException("Le statut TECH_TO_INDEX n'existe pas en base de données.");
 
-        var sourceFileMeta = request.Metadata?.FirstOrDefault(m => m.Key == "SourceFile");
+        var sourceFileMeta = request.Metadata?.Find(m => m.Key == "SourceFile");
         var sourceFileName = sourceFileMeta?.Value?.ToString();
 
         var filteredMetadata = request.Metadata?
             .Where(m => m.Key != "SourceFile" && m.Key != "ExtractionTimestamp")
             .ToDictionary(
                 m => m.Key,
-                m => new DocumentFieldValue { Value = m.Value?.ToString(), Confidence = m.Confidence }
+                m => new DocumentFieldValue { Value = m.Value?.ToString() ?? string.Empty, Confidence = m.Confidence }
             ) ?? new Dictionary<string, DocumentFieldValue>();
 
         var doc = new Document
         {
             Id = Guid.NewGuid(),
             Reference = request.Reference,
-            SupplierName = request.SupplierName,
+            SupplierName = request.SupplierName ?? string.Empty,
             TotalAmount = request.TotalAmount,
             SourceFile = sourceFileName,
             StatusId = status.Id,
@@ -139,19 +139,19 @@ public class DocumentCommandService : IDocumentCommandService
     {
         var status = await _unitOfWork.Repository<Status>()
             .FindByCondition(s => s.Code == "BUS_PENDING_VAL")
-            .FirstOrDefaultAsync() ?? throw new Exception("Statut cible introuvable.");
+            .FirstOrDefaultAsync() ?? throw new InvalidOperationException("Statut cible introuvable."); ;
 
         // 🌟 FIX : On récupère les métadonnées envoyées par React
         var initialMetadata = request.Metadata?.ToDictionary(
             m => m.Key,
-            m => new DocumentFieldValue { Value = m.Value.Value?.ToString(), Confidence = 1.0 }
+            m => new DocumentFieldValue { Value = m.Value.Value?.ToString() ?? string.Empty, Confidence = 1.0 }
         ) ?? new Dictionary<string, DocumentFieldValue>();
 
         var document = new Document
         {
             Id = Guid.NewGuid(),
             Reference = request.Reference,
-            SupplierName = request.SupplierName, // 🌟 FIX : Fournisseur
+            SupplierName = request.SupplierName ?? string.Empty, // 🌟 FIX : Fournisseur
             TotalAmount = request.TotalAmount,
             CategoryId = request.CategoryId,     // 🌟 FIX : Catégorie (Essentiel pour le workflow !)
             StatusId = status.Id,
@@ -170,7 +170,7 @@ public class DocumentCommandService : IDocumentCommandService
 
             return document.Id;
         }
-        catch (DbUpdateConcurrencyException) { throw new Exception("Conflit de récupération."); }
+        catch (DbUpdateConcurrencyException) { throw new InvalidOperationException("Conflit de récupération."); }
     }
 
     public async Task ArchiveDocumentFileAsync(Guid id)
@@ -189,8 +189,8 @@ public class DocumentCommandService : IDocumentCommandService
         }
     }
 
-    public Task SaveFileToPendingAsync(IFormFile f)
+    public Task SaveFileToPendingAsync(IFormFile file)
     {
-        return _fileStorage.SaveFileAsync(f, f.FileName, StorageFolder.Pending);
+        return _fileStorage.SaveFileAsync(file, file.FileName, StorageFolder.Pending);
     }
 }
