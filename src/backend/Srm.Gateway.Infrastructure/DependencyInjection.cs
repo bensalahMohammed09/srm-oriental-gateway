@@ -61,6 +61,8 @@ namespace Srm.Gateway.Infrastructure
 
             services.AddScoped<IDocumentMetadataService, DocumentMetadataService>();
 
+            services.AddScoped<IWorkflowEngineHelper, WorkflowEngineHelper>();
+
             services.AddScoped<IN8nService, N8nService>();
 
 

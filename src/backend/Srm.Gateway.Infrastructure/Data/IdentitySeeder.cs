@@ -36,46 +36,55 @@ namespace Srm.Gateway.Infrastructure.Data
 
             foreach (var userKvp in testUsers)
             {
-                var email = userKvp.Key;
-                var role = userKvp.Value;
+                await SeedSingleUserAsync(userManager, userKvp.Key, userKvp.Value, defaultPassword);
+            }
+        }
 
-                var user = await userManager.FindByEmailAsync(email);
+        private static async Task SeedSingleUserAsync(
+            UserManager<IdentityUser<Guid>> userManager,
+            string email,
+            string role,
+            string defaultPassword)
+        {
+            var user = await userManager.FindByEmailAsync(email);
 
-                if (user == null)
-                {
-                    var newUser = new IdentityUser<Guid>
-                    {
-                        UserName = email,
-                        Email = email,
-                        EmailConfirmed = true
-                    };
+            if (user != null)
+            {
+                await EnsureUserHasRoleAsync(userManager, user, role);
+                return;
+            }
 
-                    var result = await userManager.CreateAsync(newUser, defaultPassword);
+            var newUser = new IdentityUser<Guid>
+            {
+                UserName = email,
+                Email = email,
+                EmailConfirmed = true
+            };
 
-                    if (result.Succeeded)
-                    {
-                        var roleResult = await userManager.AddToRoleAsync(newUser, role);
-                        if (!roleResult.Succeeded)
-                        {
-                            var errors = string.Join(", ", roleResult.Errors.Select(e => e.Description));
-                            throw new Exception($"[SEEDER FATAL] User created but failed to assign role {role} to {email}: {errors}");
-                        }
-                    }
-                    else
-                    {
-                        // 💥 WE NOW THROW AN EXCEPTION SO YOU CAN SEE THE EXACT MICROSOFT IDENTITY ERROR
-                        var errors = string.Join(", ", result.Errors.Select(e => e.Description));
-                        throw new Exception($"[SEEDER FATAL] Failed to create user {email}. Reasons: {errors}");
-                    }
-                }
-                else
-                {
-                    var currentRoles = await userManager.GetRolesAsync(user);
-                    if (!currentRoles.Contains(role))
-                    {
-                        await userManager.AddToRoleAsync(user, role);
-                    }
-                }
+            var result = await userManager.CreateAsync(newUser, defaultPassword);
+            if (!result.Succeeded)
+            {
+                var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                throw new InvalidOperationException($"[SEEDER FATAL] Failed to create user {email}. Reasons: {errors}");
+            }
+
+            var roleResult = await userManager.AddToRoleAsync(newUser, role);
+            if (!roleResult.Succeeded)
+            {
+                var errors = string.Join(", ", roleResult.Errors.Select(e => e.Description));
+                throw new InvalidOperationException($"[SEEDER FATAL] User created but failed to assign role {role} to {email}: {errors}");
+            }
+        }
+
+        private static async Task EnsureUserHasRoleAsync(
+            UserManager<IdentityUser<Guid>> userManager,
+            IdentityUser<Guid> user,
+            string role)
+        {
+            var currentRoles = await userManager.GetRolesAsync(user);
+            if (!currentRoles.Contains(role))
+            {
+                await userManager.AddToRoleAsync(user, role);
             }
         }
     }
