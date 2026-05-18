@@ -1,5 +1,5 @@
 # --- GLOBAL ARGS (Provided by .env -> docker-compose) ---
-ARG DOTNET_VERSION
+ARG DOTNET_VERSION=9.0
 ARG API_INTERNAL_PORT
 ARG API_ENV
 

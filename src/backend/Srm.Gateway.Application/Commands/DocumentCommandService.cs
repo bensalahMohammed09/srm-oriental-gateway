@@ -139,9 +139,9 @@ public class DocumentCommandService : IDocumentCommandService
     {
         var status = await _unitOfWork.Repository<Status>()
             .FindByCondition(s => s.Code == "BUS_PENDING_VAL")
-            .FirstOrDefaultAsync() ?? throw new InvalidOperationException("Statut cible introuvable."); ;
+            .FirstOrDefaultAsync() ?? throw new InvalidOperationException("Statut cible introuvable.");
 
-        // 🌟 FIX : On récupère les métadonnées envoyées par React
+        // 🌟 FIX : On récupère les métadonnées envoyées 
         var initialMetadata = request.Metadata?.ToDictionary(
             m => m.Key,
             m => new DocumentFieldValue { Value = m.Value.Value?.ToString() ?? string.Empty, Confidence = 1.0 }

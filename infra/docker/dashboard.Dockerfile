@@ -1,5 +1,5 @@
-ARG NODE_VERSION
-ARG NGINX_VERSION
+ARG NODE_VERSION=20-alpine
+ARG NGINX_VERSION=stable-alpine
 
 # --- 1. Build stage ---
 FROM --platform=linux/amd64 node:${NODE_VERSION} AS build

@@ -1,5 +1,5 @@
 # --- BUILD ARGUMENTS ---
-ARG BASE_IMAGE=python:3.11-bookworm
+ARG BASE_IMAGE=python:3.11-slim-bookworm
 FROM ${BASE_IMAGE}
 
 # --- LABELS ---

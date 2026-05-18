@@ -48,7 +48,7 @@ pipeline {
                     echo "Running SonarQube analysis for Backend..."
                     withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
                         withSonarQubeEnv('sonarqube') {
-                            sh """
+                            sh '''
                                 dotnet sonarscanner begin /k:"srm-backend" \
                                 /d:sonar.login="${SONAR_TOKEN}" \
                                 /d:sonar.host.url=http://sonarqube:9002 \
@@ -56,14 +56,14 @@ pipeline {
 
                                 dotnet build src/backend/Srm.Gateway.sln --configuration Release
                                 dotnet sonarscanner end /d:sonar.login="${SONAR_TOKEN}"
-                            """
+                            '''
                         }
                     }
 
                     timeout(time: 5, unit: 'MINUTES') {
                         def qg = waitForQualityGate()
                         if (qg.status != 'OK') {
-                            error "SonarQube Quality Gate failed: ${qg.status}"
+                            error 'SonarQube Quality Gate failed: ${qg.status}'
                         }
                     }
                 } finally {
@@ -117,7 +117,7 @@ pipeline {
                     echo "GIT_SHA : ${env.DEPLOY_TAG}"
                     
                     withCredentials([usernamePassword(credentialsId: config.DOCKER_CREDS_ID, usernameVariable: 'DUSER', passwordVariable: 'DPASS')]) {
-                        sh "echo \$DPASS | docker login -u \$DUSER --password-stdin"
+                        sh 'echo \$DPASS | docker login -u \$DUSER --password-stdin'
 
                         env.ALL_SERVICES.split(',').each { serviceName ->
                             def varBase = serviceName.toUpperCase().replace('-', '_')

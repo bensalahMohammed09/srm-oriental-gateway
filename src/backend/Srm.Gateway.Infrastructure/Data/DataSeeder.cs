@@ -54,9 +54,10 @@ namespace Srm.Gateway.Infrastructure.Data
 
             foreach (var defaultCategory in defaultCategories)
             {
-                // Database-agnostic case-insensitive check (safe on SQLite, SQL Server, and PostgreSQL)
+                // Fixed CA1862: Prefer using string.Equals with StringComparison.OrdinalIgnoreCase 
+                // to optimize string comparisons and prevent unnecessary memory allocations.
                 var exists = await context.Set<Category>()
-                    .AnyAsync(c => c.Name.ToUpper() == defaultCategory.Name.ToUpper());
+                    .AnyAsync(c => string.Equals(c.Name, defaultCategory.Name, StringComparison.OrdinalIgnoreCase));
 
                 if (!exists)
                 {
