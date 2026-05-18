@@ -178,8 +178,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapControllers();
-app.MapMetrics().AllowAnonymous();
-app.MapHealthChecks("/health").AllowAnonymous();
+app.MapMetrics().AllowAnonymous(); // for prometheus
+app.MapHealthChecks("/health").AllowAnonymous(); // for /health endpoint 
 
 
 
