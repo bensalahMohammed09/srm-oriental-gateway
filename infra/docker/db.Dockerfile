@@ -1,4 +1,4 @@
-ARG POSTGRES_VERSION
+ARG POSTGRES_VERSION=16-alpine
 FROM postgres:${POSTGRES_VERSION}
 
 LABEL component="Database"

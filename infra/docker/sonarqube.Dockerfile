@@ -1,4 +1,4 @@
-ARG SONAR_VERSION
+ARG SONAR_VERSION=10.4.1-community
 FROM sonarqube:${SONAR_VERSION}
 
 # Technical labels

@@ -1,4 +1,4 @@
-ARG PROMTAIL_VERSION
+ARG PROMTAIL_VERSION=2.9.1
 FROM grafana/promtail:${PROMTAIL_VERSION}
 
 LABEL component="Log-Collector-Agent"

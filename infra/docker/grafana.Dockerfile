@@ -1,5 +1,5 @@
 # On utilise uniquement des ARG pour la construction de l'image
-ARG GRAFANA_VERSION
+ARG GRAFANA_VERSION=10.2.3
 FROM grafana/grafana:${GRAFANA_VERSION}
 
 LABEL component="Visualization-Platform"

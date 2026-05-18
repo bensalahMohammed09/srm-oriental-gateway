@@ -1,5 +1,5 @@
 # 1. Global Scope Argument
-ARG SONAR_DB_VERSION
+ARG SONAR_DB_VERSION=16-alpine
 FROM postgres:${SONAR_DB_VERSION}
 
 # 2. Technical labels for SRM Oriental Gateway
