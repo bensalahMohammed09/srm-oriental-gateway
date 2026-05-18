@@ -39,7 +39,7 @@ ENV ASPNETCORE_ENVIRONMENT=${API_ENV}
 ENV ASPNETCORE_HTTP_PORTS=${API_INTERNAL_PORT}
 ENV DOTNET_CLI_TELEMETRY_OPTOUT=1
 
-# Copy artifacts from the build-env stage
+
 # We copy them as root first to configure file system permissions safely.
 COPY --from=build-env /out .
 

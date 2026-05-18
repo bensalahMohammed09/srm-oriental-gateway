@@ -48,7 +48,7 @@ pipeline {
                     echo "Running SonarQube analysis for Backend..."
                     withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
                         withSonarQubeEnv('sonarqube') {
-                            sh '''
+                            sh """
                                 dotnet sonarscanner begin /k:"srm-backend" \
                                 /d:sonar.login="${SONAR_TOKEN}" \
                                 /d:sonar.host.url=http://sonarqube:9002 \
@@ -56,7 +56,7 @@ pipeline {
 
                                 dotnet build src/backend/Srm.Gateway.sln --configuration Release
                                 dotnet sonarscanner end /d:sonar.login="${SONAR_TOKEN}"
-                            '''
+                            """
                         }
                     }
 
@@ -190,7 +190,7 @@ pipeline {
 
                     echo "Démarrage de la stack locale avec Docker Compose pour vérification..."
                     withCredentials([file(credentialsId: 'srm-env-file', variable: 'SECRET_ENV')]) {
-                        sh '''
+                        sh """
                             cat "$SECRET_ENV" | tr -d '\r' > clean.env
                             sed -e 's|.*- \\.\\/infra\\/.*|      - /dev/null:/tmp/dummy|g' -e 's|.*\\/app\\/uploads.*|      - /dev/null:/tmp/dummy|g' docker-compose.yml > docker-compose.clean.yml
 
@@ -219,7 +219,7 @@ pipeline {
                             fi
 
                             rm clean.env docker-compose.clean.yml
-                        '''
+                        """
                     }
                 }
             }
