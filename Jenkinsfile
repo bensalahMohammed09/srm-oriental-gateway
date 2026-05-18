@@ -190,7 +190,7 @@ pipeline {
 
                     echo "Démarrage de la stack locale avec Docker Compose pour vérification..."
                     withCredentials([file(credentialsId: 'srm-env-file', variable: 'SECRET_ENV')]) {
-                        sh """
+                        sh '''
                             cat "$SECRET_ENV" | tr -d '\r' > clean.env
                             sed -e 's|.*- \\.\\/infra\\/.*|      - /dev/null:/tmp/dummy|g' -e 's|.*\\/app\\/uploads.*|      - /dev/null:/tmp/dummy|g' docker-compose.yml > docker-compose.clean.yml
 
@@ -219,7 +219,7 @@ pipeline {
                             fi
 
                             rm clean.env docker-compose.clean.yml
-                        """
+                        '''
                     }
                 }
             }
