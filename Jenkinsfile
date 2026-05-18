@@ -163,8 +163,8 @@ pipeline {
                 } 
             }
         }
-        
-        stage('6. Prepare CI Volumes & Local Integration') {
+
+       stage('6. Prepare CI Volumes & Local Integration') {
             steps {
                 script {
                     echo "Nettoyage et injection des configurations dans les volumes Docker..."
@@ -186,7 +186,7 @@ pipeline {
                         docker volume create ${projectPrefix}_grafana_provisioning
                         
                         docker volume create ${projectPrefix}_ocr_uploads || true
-                        docker run --rm -i -v ${projectPrefix}_ocr_uploads:/dest alpine chmod 777 /dest
+                        ddocker run --rm -i -v ${projectPrefix}_ocr_uploads:/dest alpine sh -c 'mkdir -p /dest/pending /dest/processed /dest/failed /dest/archived && chmod -R 777 /dest'
                     """
                     
                     echo "Injection des fichiers de configuration..."
@@ -200,7 +200,7 @@ pipeline {
                     echo "Injection du dossier de provisioning Grafana..."
                     sh "tar -cC infra/grafana/provisioning . | docker run --rm -i -v ${projectPrefix}_grafana_provisioning:/dest alpine tar -x -C /dest"
 
-                    echo "Démarrage de la stack locale avec Docker Compose pour vérification..."
+                    echo "Démarrage de la stack locale avec Docker Compose..."
                     withCredentials([file(credentialsId: 'srm-env-file', variable: 'SECRET_ENV')]) {
                         sh '''
                             cat "$SECRET_ENV" | tr -d '\r' > clean.env
@@ -211,7 +211,6 @@ pipeline {
                             docker compose -f docker-compose.clean.yml -f docker-compose.ci.yml --env-file clean.env up -d \
                                 --force-recreate \
                                 --always-recreate-deps \
-                                --remove-orphans \
                                 $SERVICES
 
                             echo "Waiting 20s for local stack stabilization..."
@@ -219,7 +218,8 @@ pipeline {
 
                             if [ "$BUILD_SRM_API" = "true" ]; then
                                 echo "Probing Local API..."
-                                docker exec srm-api curl -f http://localhost:5000/health || exit 1
+                                # FIX: Changed from curl on port 5000 to wget on port 9000
+                                docker exec srm-api wget --no-verbose --tries=1 --spider http://localhost:9000/health || exit 1
                             fi
 
                             if [ "$BUILD_SRM_OCR_WORKER" = "true" ]; then
@@ -235,22 +235,8 @@ pipeline {
                     }
                 }
             }
-            post {
-                always {
-                    script {
-                        echo "🧹 STAGE 6 CLEANUP: Tearing down local test containers..."
-                        withCredentials([file(credentialsId: 'srm-env-file', variable: 'SECRET_ENV')]) {
-                            sh '''
-                                if [ -f "docker-compose.clean.yml" ]; then
-                                    cat "$SECRET_ENV" | tr -d '\r' > clean.env
-                                    docker compose -f docker-compose.clean.yml -f docker-compose.ci.yml --env-file clean.env down --remove-orphans || true
-                                    rm -f clean.env docker-compose.clean.yml || true
-                                fi
-                            '''
-                        }
-                    }
-                }
-            }
+            // THE POST BLOCK HAS BEEN COMPLETELY REMOVED. 
+            // JENKINS WILL NO LONGER KILL YOUR CONTAINERS!
         }
 
         stage('7. Ansible Surgical Deploy') {

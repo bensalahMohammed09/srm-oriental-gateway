@@ -31,6 +31,8 @@ builder.Host.UseSerilog();
 // --- 2. SERVICE COLLECTION ---
 builder.Services.AddControllers();
 
+builder.Services.AddHealthChecks();
+
 // Configuration du Reverse Proxy : Pour récupérer l'IP réelle et le protocole (HTTP/HTTPS)
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
@@ -176,7 +178,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapControllers();
-app.MapMetrics().AllowAnonymous(); // Endpoint Prometheus sans auth
+app.MapMetrics().AllowAnonymous();
+app.MapHealthChecks("/health").AllowAnonymous();
+
+
 
 app.Run();
 

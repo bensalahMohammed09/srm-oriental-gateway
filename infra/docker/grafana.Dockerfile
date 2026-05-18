@@ -8,8 +8,6 @@ LABEL project="SRM-Oriental-Gateway"
 # On ne définit PLUS de ENV ici. 
 # Toute la configuration se fera au démarrage via le Docker Compose.
 
-# On copie le provisioning (indispensable car c'est un fichier physique)
-COPY --chown=grafana:grafana ./infra/grafana/provisioning/ /etc/grafana/provisioning/
 
 USER grafana
 
