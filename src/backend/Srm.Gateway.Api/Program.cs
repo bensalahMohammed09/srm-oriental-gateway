@@ -184,7 +184,7 @@ app.MapHealthChecks("/health").AllowAnonymous(); // for /health endpoint
 
 
 app.Run();
-
+// essentials for unittests 
 public partial class Program
 {
     protected Program() { }

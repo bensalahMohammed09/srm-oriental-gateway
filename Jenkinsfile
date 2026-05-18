@@ -186,7 +186,7 @@ pipeline {
                         docker volume create ${projectPrefix}_grafana_provisioning
                         
                         docker volume create ${projectPrefix}_ocr_uploads || true
-                        ddocker run --rm -i -v ${projectPrefix}_ocr_uploads:/dest alpine sh -c 'mkdir -p /dest/pending /dest/processed /dest/failed /dest/archived && chmod -R 777 /dest'
+                        docker run --rm -i -v ${projectPrefix}_ocr_uploads:/dest alpine sh -c 'mkdir -p /dest/pending /dest/processed /dest/failed /dest/archived && chmod -R 777 /dest'
                     """
                     
                     echo "Injection des fichiers de configuration..."
