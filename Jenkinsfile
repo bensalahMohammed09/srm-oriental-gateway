@@ -129,14 +129,26 @@ pipeline {
                                 def infraPath = "infra/docker/${dockerfileName}"
                                 def registryImage = "${config.DOCKER_NAMESPACE}/${serviceName}:${env.DEPLOY_TAG}"
 
-                                sh """
-                                    set -a && source .env && set +a
-                                    BUILD_ARGS=\$(awk -F= '/^[a-zA-Z0-9_]+/ {print "--build-arg " \$1 "=" \$2}' .env | tr -d '\r' | xargs)
+                                // 💡 THE FIX: Dynamically map the build context based on the service name
+                                def buildContext = "."
+                                if (serviceName == "srm-api") {
+                                    buildContext = "src/backend/"
+                                } else if (serviceName == "srm-ocr-worker") {
+                                    buildContext = "src/workers/ocr-worker/"
+                                } else if (serviceName == "srm-dashboard") {
+                                    buildContext = "src/frontend/srm-dashboard/"
+                                }
 
-                                    docker build \$BUILD_ARGS \\
+                                // 💡 THE FIX: Remove awk/env and inject build-args safely. 
+                                // Docker automatically ignores args that aren't used in the specific Dockerfile!
+                                sh """
+                                    docker build \\
+                                        --build-arg DOTNET_VERSION=9.0 \\
+                                        --build-arg PYTHON_VERSION=3.11 \\
+                                        --build-arg NODE_VERSION=20 \\
                                         -t ${serviceName}:latest \\
                                         -t ${registryImage} \\
-                                        -f ${infraPath} .
+                                        -f ${infraPath} ${buildContext}
                                 """
 
                                 if(env["PUSH_${varBase}"] == "true"){
@@ -151,7 +163,7 @@ pipeline {
                 } 
             }
         }
-
+        
         stage('6. Prepare CI Volumes & Local Integration') {
             steps {
                 script {
